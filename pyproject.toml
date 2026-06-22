@@ -20,6 +20,9 @@ dev = [
 [project.scripts]
 crypto-validate = "crypto_validation.cli:main"
 
+[tool.setuptools.packages.find]
+include = ["crypto_validation*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
