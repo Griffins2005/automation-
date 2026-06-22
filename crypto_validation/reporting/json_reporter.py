@@ -1,4 +1,9 @@
-"""JSON report generation."""
+"""JSON report generation.
+
+JSON reports are intended for both humans and automation. The report includes
+run metadata, summary counts, and per-test results so CI systems or dashboards
+can consume validation output without scraping terminal text.
+"""
 
 from __future__ import annotations
 
@@ -17,13 +22,29 @@ def write_json_report(
     source: VectorSource,
     results: list[TestResult],
 ) -> Path:
-    """Write a JSON validation report and return its path."""
+    """Write a JSON validation report and return its path.
+
+    Args:
+        config: Normalized validation configuration.
+        source: Vector file provenance metadata.
+        results: Per-test validation results.
+
+    Returns:
+        Path to the generated JSON report.
+
+    Report schema:
+        ``run_metadata`` contains reproducibility information, ``summary``
+        contains status counts, and ``results`` contains serialized
+        ``TestResult`` objects.
+    """
 
     report_dir = Path(config.report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     mode = config.mode.lower() if config.mode else "none"
+    # Include the run configuration in the filename so multiple algorithm/mode
+    # runs can share one report directory without overwriting each other.
     filename = f"{config.algorithm.lower()}_{mode}_{config.operation}_{config.test_type.lower()}_{timestamp}.json"
     report_path = report_dir / filename
 

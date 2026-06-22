@@ -1,4 +1,24 @@
-"""Command-line entry point for the validation framework."""
+"""Command-line entry point for the validation framework.
+
+The CLI is intentionally thin: it translates user arguments into a
+``ValidationConfig``, wires together the registered parser/DUT/executor, and
+delegates the actual validation loop to :class:`ValidationEngine`.
+
+This separation keeps the core framework usable from tests, scripts, and a
+future web API without depending on terminal-specific behavior.
+
+Example:
+    Run the sample AES-CBC encryption validation::
+
+        python3 -m crypto_validation \
+          --algorithm AES \
+          --mode CBC \
+          --operation encrypt \
+          --test-type KAT \
+          --vector-file sample_vectors/aes/aes_cbc_128.rsp \
+          --dut python \
+          --report-format json
+"""
 
 from __future__ import annotations
 
@@ -21,11 +41,27 @@ from crypto_validation.vectors import build_vector_source, load_vector_text
 
 
 EXIT_OK = 0
+"""Process exit code used when all tests pass."""
+
 EXIT_VALIDATION_FAIL = 1
+"""Process exit code used when at least one DUT output mismatches."""
+
 EXIT_SYSTEM_ERROR = 2
+"""Process exit code used for config, parser, DUT, or framework errors."""
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
+    """Build the command-line parser.
+
+    Returns:
+        Configured ``argparse.ArgumentParser`` instance.
+
+    Notes:
+        Supported choices are intentionally narrow for the MVP. New algorithms,
+        vector formats, and report formats should be added through registries
+        first, then exposed here.
+    """
+
     parser = argparse.ArgumentParser(
         prog="crypto-validate",
         description="Validate cryptographic DUTs using NIST-style test vectors.",
@@ -63,6 +99,21 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run one validation job from command-line arguments.
+
+    Args:
+        argv: Optional argument list. When ``None``, arguments are read from
+            ``sys.argv``. Tests pass an explicit list to avoid spawning a
+            subprocess.
+
+    Returns:
+        One of the module-level exit codes:
+
+        - ``0`` when all tests pass.
+        - ``1`` when one or more tests produce validation mismatches.
+        - ``2`` when the framework cannot complete the run reliably.
+    """
+
     args = build_arg_parser().parse_args(argv)
     vector_format = args.vector_format or Path(args.vector_file).suffix.lstrip(".")
 
@@ -81,11 +132,17 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     try:
+        # Validation happens before parsing so unsupported combinations fail
+        # early with CONFIG_ERROR rather than producing confusing parser/DUT
+        # failures later in the pipeline.
         config = validate_config(config)
         vector_path = Path(config.vector_file)
         source = build_vector_source(vector_path, config.vector_format)
         content = load_vector_text(vector_path)
 
+        # Parser, DUT, and executor are selected through registries so the CLI
+        # does not accumulate algorithm-specific conditionals as the framework
+        # grows beyond AES.
         parser = build_parser(config)
         test_cases = list(parser.parse(content, config, source))
         if not test_cases:
@@ -103,6 +160,8 @@ def main(argv: list[str] | None = None) -> int:
         print_console_report(config, source, results, json_report_path)
 
         summary = build_summary(results)
+        # Exit code 2 takes priority over validation failures because CI should
+        # distinguish "the DUT is wrong" from "the validation run was invalid".
         if has_system_errors(summary):
             return EXIT_SYSTEM_ERROR
         if summary["validation_failed"] > 0:

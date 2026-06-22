@@ -1,4 +1,8 @@
-"""Console report output."""
+"""Console report output.
+
+The console reporter is intentionally concise. It gives immediate feedback for
+terminal users while the JSON reporter stores the full structured artifact.
+"""
 
 from __future__ import annotations
 
@@ -12,7 +16,14 @@ def print_console_report(
     results: list[TestResult],
     json_report_path: str | None = None,
 ) -> None:
-    """Print a concise terminal validation summary."""
+    """Print a concise terminal validation summary.
+
+    Args:
+        config: Normalized validation configuration.
+        source: Vector file provenance metadata.
+        results: Per-test validation results.
+        json_report_path: Optional path to the generated JSON report.
+    """
 
     summary = build_summary(results)
     print("Validation Summary")
@@ -40,6 +51,8 @@ def print_console_report(
         print("Failures")
         print("--------")
         for result in failed[:10]:
+            # Limit console failure detail to keep large validation runs usable.
+            # Full detail remains available in the JSON report.
             print(f"Test {result.test_id}: {result.status.value}")
             if result.mismatches:
                 for field, mismatch in result.mismatches.items():

@@ -1,4 +1,13 @@
-"""Configuration construction and validation."""
+"""Configuration construction and validation.
+
+This module is the first gate in the validation pipeline. It normalizes user
+input into canonical forms such as ``AES`` and ``KAT`` and rejects unsupported
+combinations before any parsing or DUT execution happens.
+
+The explicit support sets make current MVP boundaries visible to developers.
+When adding new features, update these sets together with the corresponding
+parser, DUT, executor, and tests.
+"""
 
 from __future__ import annotations
 
@@ -18,7 +27,16 @@ SUPPORTED_REPORT_FORMATS = {"console", "json"}
 
 
 def normalize_config(config: ValidationConfig) -> ValidationConfig:
-    """Return a normalized copy of a validation config."""
+    """Return a normalized copy of a validation config.
+
+    Args:
+        config: Raw configuration assembled from CLI arguments or future config
+            file loading.
+
+    Returns:
+        A new ``ValidationConfig`` with canonical casing for fields that are
+        compared against registries.
+    """
 
     return ValidationConfig(
         algorithm=config.algorithm.upper(),
@@ -36,10 +54,23 @@ def normalize_config(config: ValidationConfig) -> ValidationConfig:
 
 
 def validate_config(config: ValidationConfig) -> ValidationConfig:
-    """Validate a user configuration and return a normalized version."""
+    """Validate a user configuration and return a normalized version.
+
+    Args:
+        config: Raw validation configuration.
+
+    Returns:
+        Normalized and validated configuration.
+
+    Raises:
+        ConfigError: If the requested algorithm, mode, operation, vector format,
+            DUT, report format, or vector file path is unsupported/invalid.
+    """
 
     normalized = normalize_config(config)
 
+    # These checks are deliberately explicit. They double as a compact
+    # specification for what the MVP supports today.
     if normalized.algorithm not in SUPPORTED_ALGORITHMS:
         raise ConfigError(f"Unsupported algorithm: {normalized.algorithm}")
 

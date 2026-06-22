@@ -1,4 +1,9 @@
-"""Vector file loading and provenance helpers."""
+"""Vector file loading and provenance helpers.
+
+Vector provenance is part of validation credibility. Every report includes a
+SHA-256 checksum of the vector file so a result can be reproduced against the
+same input data later.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +14,18 @@ from crypto_validation.models import VectorSource
 
 
 def compute_file_sha256(path: Path) -> str:
-    """Compute the SHA-256 checksum for a vector file."""
+    """Compute the SHA-256 checksum for a vector file.
+
+    Args:
+        path: File path to hash.
+
+    Returns:
+        Hex-encoded SHA-256 digest.
+
+    Notes:
+        The file is read in chunks so the helper remains safe for large NIST
+        vector files.
+    """
 
     digest = hashlib.sha256()
     with path.open("rb") as file:
@@ -19,13 +35,28 @@ def compute_file_sha256(path: Path) -> str:
 
 
 def load_vector_text(path: Path) -> str:
-    """Load a text vector file."""
+    """Load a UTF-8 text vector file.
+
+    Args:
+        path: Path to the vector file.
+
+    Returns:
+        Full file contents as text.
+    """
 
     return path.read_text(encoding="utf-8")
 
 
 def build_vector_source(path: Path, vector_format: str) -> VectorSource:
-    """Build provenance metadata for a vector file."""
+    """Build provenance metadata for a vector file.
+
+    Args:
+        path: Vector file path.
+        vector_format: Parser format selected for the file.
+
+    Returns:
+        ``VectorSource`` containing path, format, and checksum.
+    """
 
     return VectorSource(
         path=str(path),

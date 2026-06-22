@@ -1,4 +1,9 @@
-"""DUT registry."""
+"""DUT registry.
+
+The registry is the single place where framework configuration is mapped to a
+concrete DUT adapter. This avoids scattering ``if algorithm == ...`` decisions
+throughout the CLI or validation engine.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +14,17 @@ from crypto_validation.models import ValidationConfig
 
 
 def build_dut(config: ValidationConfig) -> Dut:
-    """Construct the configured DUT."""
+    """Construct the configured DUT.
+
+    Args:
+        config: Normalized validation configuration.
+
+    Returns:
+        DUT adapter matching the requested algorithm, mode, and backend.
+
+    Raises:
+        UnsupportedTestError: If no matching DUT adapter exists.
+    """
 
     if config.algorithm == "AES" and config.dut == "python":
         if config.mode is None:
