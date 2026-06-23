@@ -287,6 +287,18 @@ The system must detect incorrect expected outputs. Tests include failure
 injection by modifying a known-good ciphertext and verifying that the CLI exits
 with validation failure status and records the mismatch in the JSON report.
 
+Failure-injection tests use independent hardcoded CAVS/NIST vector text rather
+than framework-generated mutations. This makes the tests useful for catching
+issues in parser, DUT, comparator, and report behavior.
+
+Current failure-injection coverage includes:
+
+- CBC encrypt and decrypt
+- ECB encrypt and decrypt
+- CTR encrypt and decrypt
+- CTR modified key
+- CTR modified counter block
+
 ## 8. Exit Codes
 
 | Exit Code | Meaning |

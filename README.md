@@ -235,6 +235,11 @@ does not run CFB1 validation yet.
 python3 -m pytest
 ```
 
+The test suite includes independent hardcoded CAVS/NIST vector fixtures. Failure
+injection tests manually alter expected ciphertext/plaintext, keys, and CTR
+counters in those fixtures to confirm the framework detects mismatches instead
+of only passing correct inputs.
+
 ## CLI Exit Codes
 
 | Code | Meaning |
