@@ -1,7 +1,8 @@
 import json
 import shutil
+from pathlib import Path
 
-from crypto_validation.cli import EXIT_OK, EXIT_SYSTEM_ERROR, main
+from crypto_validation.cli import EXIT_OK, EXIT_SYSTEM_ERROR, EXIT_VALIDATION_FAIL, main
 
 
 def test_cli_runs_aes_cbc_encrypt_end_to_end(tmp_path):
@@ -34,6 +35,8 @@ def test_cli_runs_aes_cbc_encrypt_end_to_end(tmp_path):
     assert payload["summary"]["total"] == 2
     assert payload["summary"]["passed"] == 2
     assert payload["summary"]["validation_failed"] == 0
+    assert payload["run_metadata"]["elapsed_seconds"] is not None
+    assert payload["run_metadata"]["throughput_tests_per_second"] is not None
 
 
 def test_cli_without_arguments_starts_interactive_single_file_wizard(monkeypatch, capsys):
@@ -61,6 +64,7 @@ def test_cli_without_arguments_starts_interactive_single_file_wizard(monkeypatch
     assert "Interactive validation wizard" in captured.out
     assert "AES-CBC encrypt KAT" in captured.out
     assert "Total Tests: 2" in captured.out
+    assert "Where should reports be written" not in captured.out
 
 
 def test_cli_list_supported_prints_supported_matrix(capsys):
@@ -144,3 +148,154 @@ def test_interactive_folder_wizard_skips_unsupported_cfb_files(tmp_path, monkeyp
     assert "Runnable with current MVP: 1" in captured.out
     assert "Skipped unsupported/unknown files: 1" in captured.out
     assert "AES-CFB1 is not supported yet" in captured.out
+
+
+def test_interactive_folder_wizard_skips_forced_mode_mismatches(tmp_path, monkeypatch, capsys):
+    vector_dir = tmp_path / "vectors"
+    vector_dir.mkdir()
+    shutil.copy("sample_vectors/aes/aes_cbc_128.rsp", vector_dir / "CBCVarKey128.rsp")
+    shutil.copy("sample_vectors/aes/aes_ctr_128.rsp", vector_dir / "CTRVarKey128.rsp")
+
+    answers = iter(
+        [
+            "",  # algorithm: AES
+            "",  # test type: KAT
+            "",  # operation: encrypt
+            "2",  # source kind: folder
+            str(vector_dir),
+            "3",  # force CBC
+            "",  # DUT: python
+            "2",  # report format: console
+            "",  # fail fast: no
+            "",  # run now: yes
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    exit_code = main(["--interactive"])
+
+    captured = capsys.readouterr()
+    assert exit_code == EXIT_OK
+    assert "Runnable with current MVP: 1" in captured.out
+    assert "filename mode CTR does not match forced CBC" in captured.out
+    assert "Global Summary" not in captured.out
+
+
+def test_folder_wizard_prints_global_summary(tmp_path, monkeypatch, capsys):
+    vector_dir = tmp_path / "vectors"
+    vector_dir.mkdir()
+    shutil.copy("sample_vectors/aes/aes_cbc_128.rsp", vector_dir / "CBCVarKey128.rsp")
+    shutil.copy("sample_vectors/aes/aes_ctr_128.rsp", vector_dir / "CTRVarKey128.rsp")
+
+    answers = iter(
+        [
+            "",  # algorithm: AES
+            "",  # test type: KAT
+            "",  # operation: encrypt
+            "2",  # source kind: folder
+            str(vector_dir),
+            "",  # auto-detect
+            "",  # DUT: python
+            "2",  # report format: console
+            "",  # fail fast: no
+            "",  # run now: yes
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    exit_code = main(["--interactive"])
+
+    captured = capsys.readouterr()
+    assert exit_code == EXIT_OK
+    assert "Global Summary" in captured.out
+    assert "Files Run: 2" in captured.out
+    assert "Throughput:" in captured.out
+
+
+def test_failure_injection_modified_ciphertext_is_detected(tmp_path):
+    bad_vector = tmp_path / "bad_cbc.rsp"
+    original = Path("sample_vectors/aes/aes_cbc_128.rsp").read_text(encoding="utf-8")
+    bad_vector.write_text(
+        original.replace("7649abac8119b246cee98e9b12e9197d", "7649abac8119b246cee98e9b12e9197e", 1),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "--algorithm",
+            "AES",
+            "--mode",
+            "CBC",
+            "--operation",
+            "encrypt",
+            "--test-type",
+            "KAT",
+            "--vector-file",
+            str(bad_vector),
+            "--dut",
+            "python",
+            "--report-format",
+            "json",
+            "--report-dir",
+            str(tmp_path),
+        ]
+    )
+
+    assert exit_code == EXIT_VALIDATION_FAIL
+    reports = list(tmp_path.glob("*.json"))
+    assert len(reports) == 1
+    payload = json.loads(reports[0].read_text(encoding="utf-8"))
+    assert payload["summary"]["validation_failed"] == 1
+
+
+def test_json_report_names_are_unique(tmp_path):
+    args = [
+        "--algorithm",
+        "AES",
+        "--mode",
+        "CBC",
+        "--operation",
+        "encrypt",
+        "--test-type",
+        "KAT",
+        "--vector-file",
+        "sample_vectors/aes/aes_cbc_128.rsp",
+        "--dut",
+        "python",
+        "--report-format",
+        "json",
+        "--report-dir",
+        str(tmp_path),
+    ]
+
+    assert main(args) == EXIT_OK
+    assert main(args) == EXIT_OK
+
+    assert len(list(tmp_path.glob("*.json"))) == 2
+
+
+def test_cli_runs_aes_ctr_encrypt_end_to_end(tmp_path):
+    exit_code = main(
+        [
+            "--algorithm",
+            "AES",
+            "--mode",
+            "CTR",
+            "--operation",
+            "encrypt",
+            "--test-type",
+            "KAT",
+            "--vector-file",
+            "sample_vectors/aes/aes_ctr_128.rsp",
+            "--dut",
+            "python",
+            "--report-format",
+            "json",
+            "--report-dir",
+            str(tmp_path),
+        ]
+    )
+
+    assert exit_code == EXIT_OK
+    payload = json.loads(next(tmp_path.glob("*.json")).read_text(encoding="utf-8"))
+    assert payload["summary"]["passed"] == 2

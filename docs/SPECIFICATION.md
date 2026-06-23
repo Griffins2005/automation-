@@ -52,6 +52,8 @@ collects the same run configuration step by step and can run either:
 For folder runs, the wizard scans recursively. It can auto-detect supported AES
 modes from filenames containing `ECB`, `CBC`, or `CTR`. Files that look like
 unsupported AES modes, such as `CFB1VarKey256.rsp`, are skipped with a message.
+If a user forces a mode, files whose filename indicates another supported mode
+are skipped to avoid incompatible validation runs.
 
 Discovery commands:
 
@@ -167,19 +169,30 @@ Important statuses:
 - Does not use IV.
 - Encryption input: `key`, `plaintext`.
 - Decryption input: `key`, `ciphertext`.
+- Input and expected output data must be block-aligned.
+- Vector records must not include `IV`.
 
 ### AES-CBC
 
 - Requires IV.
+- IV must be 128 bits.
 - No automatic padding is applied.
 - Payload must be block-aligned.
 
 ### AES-CTR
 
 - Requires IV.
+- IV/counter must be 128 bits.
 - MVP convention: the IV is interpreted as the full 128-bit big-endian initial
   counter value.
+- This matches the NIST SP 800-38A Appendix F.5 style sample vector included in
+  `sample_vectors/aes/aes_ctr_128.rsp`.
+- CTR payloads do not need to be block-aligned.
 - Future ACVP vectors may require explicit nonce/counter metadata.
+
+### AES Key Sizes
+
+All AES modes require keys of 128, 192, or 256 bits.
 
 ## 5. Parser Rules
 
@@ -259,8 +272,22 @@ Every JSON report includes:
 - Vector file path
 - Vector file SHA-256 checksum
 - Per-test output or error details
+- Elapsed execution time
+- Throughput in tests per second
 
-## 7. Exit Codes
+Report filenames include algorithm, mode, operation, test type, vector file
+stem, and a high-resolution UTC timestamp. If a collision occurs, a numeric
+suffix is added instead of overwriting an existing report.
+
+Folder/multi-file runs print a global summary across all executed files.
+
+## 7. Failure Detection Expectations
+
+The system must detect incorrect expected outputs. Tests include failure
+injection by modifying a known-good ciphertext and verifying that the CLI exits
+with validation failure status and records the mismatch in the JSON report.
+
+## 8. Exit Codes
 
 | Exit Code | Meaning |
 | --- | --- |

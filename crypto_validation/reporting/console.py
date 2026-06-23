@@ -15,6 +15,7 @@ def print_console_report(
     source: VectorSource,
     results: list[TestResult],
     json_report_path: str | None = None,
+    elapsed_seconds: float | None = None,
 ) -> None:
     """Print a concise terminal validation summary.
 
@@ -23,6 +24,7 @@ def print_console_report(
         source: Vector file provenance metadata.
         results: Per-test validation results.
         json_report_path: Optional path to the generated JSON report.
+        elapsed_seconds: Optional measured run duration.
     """
 
     summary = build_summary(results)
@@ -44,6 +46,10 @@ def print_console_report(
     print(f"DUT Errors: {summary['dut_errors']}")
     print(f"Unsupported Tests: {summary['unsupported_tests']}")
     print(f"Internal Errors: {summary['internal_errors']}")
+    if elapsed_seconds is not None:
+        throughput = summary["total"] / elapsed_seconds if elapsed_seconds > 0 else 0.0
+        print(f"Elapsed Time: {elapsed_seconds:.4f}s")
+        print(f"Throughput: {throughput:.2f} tests/s")
 
     failed = [result for result in results if result.status.value != "PASS"]
     if failed:

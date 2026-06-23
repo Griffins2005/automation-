@@ -8,6 +8,7 @@ can consume validation output without scraping terminal text.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,6 +22,7 @@ def write_json_report(
     config: ValidationConfig,
     source: VectorSource,
     results: list[TestResult],
+    elapsed_seconds: float | None = None,
 ) -> Path:
     """Write a JSON validation report and return its path.
 
@@ -28,6 +30,7 @@ def write_json_report(
         config: Normalized validation configuration.
         source: Vector file provenance metadata.
         results: Per-test validation results.
+        elapsed_seconds: Optional measured execution time.
 
     Returns:
         Path to the generated JSON report.
@@ -41,12 +44,20 @@ def write_json_report(
     report_dir = Path(config.report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     mode = config.mode.lower() if config.mode else "none"
+    vector_stem = _safe_filename_part(Path(source.path).stem)
     # Include the run configuration in the filename so multiple algorithm/mode
     # runs can share one report directory without overwriting each other.
-    filename = f"{config.algorithm.lower()}_{mode}_{config.operation}_{config.test_type.lower()}_{timestamp}.json"
-    report_path = report_dir / filename
+    filename = (
+        f"{config.algorithm.lower()}_{mode}_{config.operation}_"
+        f"{config.test_type.lower()}_{vector_stem}_{timestamp}.json"
+    )
+    report_path = _unique_report_path(report_dir / filename)
+    summary = build_summary(results)
+    throughput = None
+    if elapsed_seconds is not None:
+        throughput = summary["total"] / elapsed_seconds if elapsed_seconds > 0 else 0.0
 
     payload = {
         "run_metadata": {
@@ -61,10 +72,32 @@ def write_json_report(
             "vector_file": source.path,
             "vector_format": source.format,
             "vector_checksum_sha256": source.checksum_sha256,
+            "elapsed_seconds": elapsed_seconds,
+            "throughput_tests_per_second": throughput,
         },
-        "summary": build_summary(results),
+        "summary": summary,
         "results": [asdict(result) for result in results],
     }
 
     report_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return report_path
+
+
+def _safe_filename_part(value: str) -> str:
+    """Return a filesystem-friendly filename component."""
+
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("._") or "vector"
+
+
+def _unique_report_path(path: Path) -> Path:
+    """Return a non-existing report path by appending a suffix if needed."""
+
+    if not path.exists():
+        return path
+
+    for index in range(1, 1000):
+        candidate = path.with_name(f"{path.stem}_{index}{path.suffix}")
+        if not candidate.exists():
+            return candidate
+
+    raise FileExistsError(f"Could not create a unique report filename for {path}")

@@ -45,6 +45,9 @@ HEX_FIELDS = {
 }
 """Fields that should be treated as hexadecimal values when parsing."""
 
+AES_KEY_BYTE_LENGTHS = {16, 24, 32}
+AES_BLOCK_BYTES = 16
+
 
 class RspParser(VectorParser):
     """Parse NIST-style `.rsp` text into ``TestCase`` objects.
@@ -222,6 +225,8 @@ class RspParser(VectorParser):
             **group_metadata,
         }
 
+        self._validate_aes_fields(config, test_id, input_data, expected_output, record)
+
         return TestCase(
             test_id=test_id,
             algorithm=config.algorithm,
@@ -240,6 +245,45 @@ class RspParser(VectorParser):
         if field not in record:
             raise ParseError(f"Record COUNT {test_id} is missing required field: {field.upper()}")
         return record[field]
+
+    @staticmethod
+    def _validate_aes_fields(
+        config: ValidationConfig,
+        test_id: str,
+        input_data: dict[str, str],
+        expected_output: dict[str, str],
+        record: dict[str, str],
+    ) -> None:
+        """Validate AES field requirements before DUT execution.
+
+        Raises:
+            ParseError: If the vector record is incompatible with the selected
+                AES mode or violates basic NIST AES field size requirements.
+        """
+
+        key = bytes.fromhex(input_data["key"])
+        if len(key) not in AES_KEY_BYTE_LENGTHS:
+            raise ParseError(f"COUNT {test_id}: AES key must be 128, 192, or 256 bits")
+
+        if config.mode == "ECB" and "iv" in record:
+            raise ParseError(f"COUNT {test_id}: AES-ECB vectors must not include IV")
+
+        if config.mode in {"CBC", "CTR"}:
+            iv = bytes.fromhex(input_data["iv"])
+            if len(iv) != AES_BLOCK_BYTES:
+                raise ParseError(f"COUNT {test_id}: AES-{config.mode} IV/counter must be 128 bits")
+
+        payload_hex_values = [
+            value
+            for field_map in (input_data, expected_output)
+            for field, value in field_map.items()
+            if field in {"plaintext", "ciphertext"}
+        ]
+
+        if config.mode in {"ECB", "CBC"}:
+            for value in payload_hex_values:
+                if len(bytes.fromhex(value)) % AES_BLOCK_BYTES != 0:
+                    raise ParseError(f"COUNT {test_id}: AES-{config.mode} data must be block-aligned")
 
     @staticmethod
     def _normalize_field_value(field: str, value: str, line_number: int) -> str:

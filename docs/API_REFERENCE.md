@@ -30,6 +30,10 @@ File source options:
 Folder mode scans recursively, runs supported ECB/CBC/CTR files, and skips
 unsupported files such as CFB1/OFB vectors.
 
+If a user forces a mode, files whose filename suggests a different supported
+mode are skipped. This prevents accidental CBC validation against CTR vectors,
+or similar incompatible combinations.
+
 ### Discovery flags
 
 The CLI includes two user-guidance modes that do not require validation
@@ -206,9 +210,15 @@ Returns whether system-level errors occurred.
 
 Prints a concise terminal summary.
 
+The implementation also accepts an optional elapsed time and prints throughput.
+
 ### `write_json_report(config, source, results) -> Path`
 
 Writes a structured JSON report and returns its path.
+
+The implementation records elapsed time and throughput when provided, and uses
+collision-resistant filenames that include vector file stem plus high-resolution
+UTC timestamp.
 
 ## `crypto_validation.vectors`
 
