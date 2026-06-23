@@ -235,10 +235,27 @@ does not run CFB1 validation yet.
 python3 -m pytest
 ```
 
-The test suite includes independent hardcoded CAVS/NIST vector fixtures. Failure
-injection tests manually alter expected ciphertext/plaintext, keys, and CTR
-counters in those fixtures to confirm the framework detects mismatches instead
-of only passing correct inputs.
+## Manual Failure-Injection Vector Files
+
+Standalone bad `.rsp` files are available here:
+
+```text
+sample_vectors/aes/failure_injection/
+```
+
+These files are intentionally wrong and are meant for manual validation checks.
+Examples:
+
+```bash
+python3 -m crypto_validation --algorithm AES --mode CBC --operation encrypt \
+  --vector-file sample_vectors/aes/failure_injection/cbc_encrypt_bad_ciphertext.rsp
+
+python3 -m crypto_validation --algorithm AES --mode CTR --operation encrypt \
+  --vector-file sample_vectors/aes/failure_injection/ctr_encrypt_bad_counter.rsp
+```
+
+They include bad CBC, ECB, and CTR vectors with modified ciphertext, plaintext,
+key, or counter values.
 
 ## CLI Exit Codes
 

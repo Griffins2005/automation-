@@ -1,0 +1,11 @@
+# Intentionally bad AES-CBC decrypt vector.
+# Source: CAVS 11.1 AESVS GFSbox CBC COUNT 0.
+# Injection: expected PLAINTEXT first hex nibble changed from f to e.
+
+[DECRYPT]
+
+COUNT = 0
+KEY = 00000000000000000000000000000000
+IV = 00000000000000000000000000000000
+CIPHERTEXT = 0336763e966d92595a567cc9ce537f5e
+PLAINTEXT = e34481ec3cc627bacd5dc3fb08f273e6

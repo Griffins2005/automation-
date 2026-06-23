@@ -283,13 +283,17 @@ Folder/multi-file runs print a global summary across all executed files.
 
 ## 7. Failure Detection Expectations
 
-The system must detect incorrect expected outputs. Tests include failure
-injection by modifying a known-good ciphertext and verifying that the CLI exits
-with validation failure status and records the mismatch in the JSON report.
+The system must detect incorrect expected outputs or incompatible input fields.
+Standalone bad vector files are provided for manual failure-detection checks.
 
-Failure-injection tests use independent hardcoded CAVS/NIST vector text rather
-than framework-generated mutations. This makes the tests useful for catching
-issues in parser, DUT, comparator, and report behavior.
+Manual failure-injection vectors live in:
+
+```text
+sample_vectors/aes/failure_injection/
+```
+
+They are plain `.rsp` files with intentionally modified values. The framework
+does not generate or mutate them.
 
 Current failure-injection coverage includes:
 
