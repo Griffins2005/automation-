@@ -5,6 +5,46 @@ For full parameter descriptions, read the docstrings in the source files.
 
 ## `crypto_validation.cli`
 
+### Interactive wizard
+
+Running without arguments starts the interactive wizard:
+
+```bash
+python -m crypto_validation
+```
+
+It can also be started explicitly:
+
+```bash
+python -m crypto_validation --interactive
+```
+
+The wizard asks for algorithm, test type, operation, file source, mode handling,
+DUT backend, report format, report directory, and confirmation before running.
+
+File source options:
+
+1. a single `.rsp` vector file
+2. a folder containing `.rsp` vector files
+
+Folder mode scans recursively, runs supported ECB/CBC/CTR files, and skips
+unsupported files such as CFB1/OFB vectors.
+
+### Discovery flags
+
+The CLI includes two user-guidance modes that do not require validation
+arguments:
+
+```bash
+python -m crypto_validation --list-supported
+python -m crypto_validation --show-format
+```
+
+Use `--list-supported` to print the currently supported algorithms, modes, DUTs,
+formats, and reports.
+
+Use `--show-format` to print the supported `.rsp` vector file shape.
+
 ### `main(argv: list[str] | None = None) -> int`
 
 Runs one validation job.
@@ -19,6 +59,10 @@ Returns:
 
 Builds the command-line parser used by both `crypto-validate` and
 `python -m crypto_validation`.
+
+The parser is intentionally educational: `--help` includes the supported MVP
+matrix, complete Linux/macOS and Windows PowerShell examples, and the expected
+`.rsp` record structure.
 
 ## `crypto_validation.config`
 

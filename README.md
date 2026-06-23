@@ -40,6 +40,77 @@ Install the package with development dependencies:
 python3 -m pip install -e ".[dev]"
 ```
 
+Start the interactive wizard:
+
+```bash
+python3 -m crypto_validation
+```
+
+Windows PowerShell:
+
+```powershell
+python -m crypto_validation
+```
+
+The wizard asks step by step:
+
+1. Algorithm
+2. Test type
+3. Operation
+4. Single vector file or folder of `.rsp` files
+5. AES mode or automatic mode detection from filenames
+6. DUT backend
+7. Report format
+8. Report directory
+9. Whether to run immediately
+
+For file selection, the wizard supports:
+
+```text
+1. A specific vector file
+2. All supported .rsp vector files inside a folder
+```
+
+When folder mode is selected, the wizard scans for `.rsp` files recursively,
+auto-detects supported AES modes from filenames such as `CBCVarKey128.rsp`, and
+skips unsupported files such as `CFB1VarKey256.rsp`.
+
+## Understand the CLI Inputs
+
+The terminal command does **not** ask users to type vector values such as
+`KEY`, `IV`, `PLAINTEXT`, or `CIPHERTEXT`.
+
+Those values must already exist inside the vector file passed with
+`--vector-file`.
+
+The terminal arguments tell the tool how to interpret and run that file:
+
+| CLI argument | What it means | Current values |
+| --- | --- | --- |
+| `--algorithm` | Which algorithm family to validate | `AES` |
+| `--mode` | Which AES mode the file belongs to | `ECB`, `CBC`, `CTR` |
+| `--operation` | Which section to run | `encrypt`, `decrypt` |
+| `--test-type` | Which validation method to use | `KAT` |
+| `--vector-file` | Path to the `.rsp` vector file | user path |
+| `--dut` | Which implementation to test | `python` |
+| `--report-format` | Report output type | `console`, `json` |
+
+Discovery commands:
+
+```bash
+python3 -m crypto_validation --interactive
+python3 -m crypto_validation --list-supported
+python3 -m crypto_validation --show-format
+```
+
+Windows PowerShell:
+
+```powershell
+python -m crypto_validation --interactive
+python -m crypto_validation --list-supported
+python -m crypto_validation --show-format
+```
+
 Run the sample AES-CBC encryption validation:
 
 ```bash
@@ -51,6 +122,20 @@ python3 -m crypto_validation \
   --vector-file sample_vectors/aes/aes_cbc_128.rsp \
   --dut python \
   --report-format json \
+  --report-dir reports
+```
+
+Windows PowerShell equivalent:
+
+```powershell
+python -m crypto_validation `
+  --algorithm AES `
+  --mode CBC `
+  --operation encrypt `
+  --test-type KAT `
+  --vector-file sample_vectors/aes/aes_cbc_128.rsp `
+  --dut python `
+  --report-format json `
   --report-dir reports
 ```
 
@@ -75,6 +160,43 @@ python3 -m crypto_validation \
   --report-format json \
   --report-dir reports
 ```
+
+## Currently Supported `.rsp` Shape
+
+AES-CBC or AES-CTR encryption records:
+
+```text
+[ENCRYPT]
+COUNT = 0
+KEY = <hex>
+IV = <hex>
+PLAINTEXT = <hex>
+CIPHERTEXT = <hex>
+```
+
+AES-CBC or AES-CTR decryption records:
+
+```text
+[DECRYPT]
+COUNT = 0
+KEY = <hex>
+IV = <hex>
+CIPHERTEXT = <hex>
+PLAINTEXT = <hex>
+```
+
+AES-ECB records are the same but omit `IV`.
+
+Important limitation:
+
+```text
+AES-CFB, AES-OFB, bit-level CFB1 vectors, Monte Carlo Tests, ACVP JSON,
+SHA, HMAC, RSA, ECC, and DRBG are not supported by the current MVP yet.
+```
+
+If your vector file is named like `CFB1VarKey256.rsp`, it is an AES-CFB1
+bit-level vector. The current MVP will explain the supported format, but it
+does not run CFB1 validation yet.
 
 ## Run Tests
 
