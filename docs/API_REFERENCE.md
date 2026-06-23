@@ -5,6 +5,31 @@ For full parameter descriptions, read the docstrings in the source files.
 
 ## `crypto_validation.cli`
 
+### Interactive wizard
+
+Running without arguments starts the interactive wizard:
+
+```bash
+python -m crypto_validation
+```
+
+It can also be started explicitly:
+
+```bash
+python -m crypto_validation --interactive
+```
+
+The wizard asks for algorithm, test type, operation, file source, mode handling,
+DUT backend, report format, report directory, and confirmation before running.
+
+File source options:
+
+1. a single `.rsp` vector file
+2. a folder containing `.rsp` vector files
+
+Folder mode scans recursively, runs supported ECB/CBC/CTR files, and skips
+unsupported files such as CFB1/OFB vectors.
+
 ### Discovery flags
 
 The CLI includes two user-guidance modes that do not require validation

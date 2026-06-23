@@ -43,9 +43,20 @@ Users should not type vector values such as `KEY`, `IV`, `PLAINTEXT`, or
 `CIPHERTEXT` directly into the terminal. Those values belong inside the `.rsp`
 file referenced by `--vector-file`.
 
+If no arguments are provided, the CLI starts an interactive wizard. The wizard
+collects the same run configuration step by step and can run either:
+
+1. one specific vector file, or
+2. every supported `.rsp` file found under a selected folder.
+
+For folder runs, the wizard scans recursively. It can auto-detect supported AES
+modes from filenames containing `ECB`, `CBC`, or `CTR`. Files that look like
+unsupported AES modes, such as `CFB1VarKey256.rsp`, are skipped with a message.
+
 Discovery commands:
 
 ```bash
+python -m crypto_validation --interactive
 python -m crypto_validation --list-supported
 python -m crypto_validation --show-format
 ```

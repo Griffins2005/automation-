@@ -40,6 +40,41 @@ Install the package with development dependencies:
 python3 -m pip install -e ".[dev]"
 ```
 
+Start the interactive wizard:
+
+```bash
+python3 -m crypto_validation
+```
+
+Windows PowerShell:
+
+```powershell
+python -m crypto_validation
+```
+
+The wizard asks step by step:
+
+1. Algorithm
+2. Test type
+3. Operation
+4. Single vector file or folder of `.rsp` files
+5. AES mode or automatic mode detection from filenames
+6. DUT backend
+7. Report format
+8. Report directory
+9. Whether to run immediately
+
+For file selection, the wizard supports:
+
+```text
+1. A specific vector file
+2. All supported .rsp vector files inside a folder
+```
+
+When folder mode is selected, the wizard scans for `.rsp` files recursively,
+auto-detects supported AES modes from filenames such as `CBCVarKey128.rsp`, and
+skips unsupported files such as `CFB1VarKey256.rsp`.
+
 ## Understand the CLI Inputs
 
 The terminal command does **not** ask users to type vector values such as
@@ -63,6 +98,7 @@ The terminal arguments tell the tool how to interpret and run that file:
 Discovery commands:
 
 ```bash
+python3 -m crypto_validation --interactive
 python3 -m crypto_validation --list-supported
 python3 -m crypto_validation --show-format
 ```
@@ -70,6 +106,7 @@ python3 -m crypto_validation --show-format
 Windows PowerShell:
 
 ```powershell
+python -m crypto_validation --interactive
 python -m crypto_validation --list-supported
 python -m crypto_validation --show-format
 ```

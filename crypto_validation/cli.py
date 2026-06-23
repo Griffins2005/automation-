@@ -7,6 +7,11 @@ delegates the actual validation loop to :class:`ValidationEngine`.
 This separation keeps the core framework usable from tests, scripts, and a
 future web API without depending on terminal-specific behavior.
 
+When the user runs the tool without arguments, the CLI starts an interactive
+wizard. The wizard is optimized for the early framework stage: it asks only for
+the information needed by the current MVP and can run either one vector file or
+all supported vector files discovered under a folder.
+
 Example:
     Run the sample AES-CBC encryption validation::
 
@@ -49,6 +54,10 @@ EXIT_VALIDATION_FAIL = 1
 
 EXIT_SYSTEM_ERROR = 2
 """Process exit code used for config, parser, DUT, or framework errors."""
+
+AUTO_MODE = "AUTO"
+SUPPORTED_AES_MODES = ("ECB", "CBC", "CTR")
+UNSUPPORTED_AES_MODE_TOKENS = ("CFB1", "CFB8", "CFB128", "CFB", "OFB")
 
 CLI_GUIDANCE = """
 Current MVP support
@@ -124,6 +133,20 @@ Windows PowerShell:
 For decrypt, change:
 
   --operation decrypt
+"""
+
+INTERACTIVE_INTRO = """
+Interactive validation wizard
+-----------------------------
+Answer each prompt and the tool will build the validation command for you.
+
+Current MVP support:
+  Algorithm: AES
+  Modes:     ECB, CBC, CTR
+  Test type: KAT
+  Format:    .rsp
+
+Note: AES-CFB/CFB1/OFB files are not supported by this MVP yet.
 """
 
 
@@ -253,6 +276,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Print the currently supported .rsp vector file structure.",
     )
     parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Start the step-by-step validation wizard.",
+    )
+    parser.add_argument(
         "--algorithm",
         type=str.upper,
         choices=["AES"],
@@ -334,14 +362,12 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = build_arg_parser()
     if not argv:
-        parser.print_help(sys.stderr)
-        print(
-            "\nNo arguments were provided. Use the examples above and pass vector contents with --vector-file.",
-            file=sys.stderr,
-        )
-        return EXIT_SYSTEM_ERROR
+        return run_interactive_wizard()
 
     args = parser.parse_args(argv)
+
+    if args.interactive:
+        return run_interactive_wizard()
 
     if args.list_supported:
         print(textwrap.dedent(SUPPORTED_DETAILS).strip())
@@ -389,6 +415,43 @@ def main(argv: list[str] | None = None) -> int:
         include_sensitive=args.include_sensitive,
     )
 
+    return run_configs([config])
+
+
+def run_configs(configs: list[ValidationConfig]) -> int:
+    """Run one or more validation configurations.
+
+    Args:
+        configs: Validation runs to execute. Folder-based interactive runs
+            produce one config per discovered vector file.
+
+    Returns:
+        Aggregated exit code. System errors take priority over validation
+        failures, and validation failures take priority over success.
+    """
+
+    if not configs:
+        print("No runnable vector files were selected.", file=sys.stderr)
+        return EXIT_SYSTEM_ERROR
+
+    exit_code = EXIT_OK
+    for index, config in enumerate(configs, start=1):
+        if len(configs) > 1:
+            print()
+            print(f"=== Validation run {index}/{len(configs)}: {config.vector_file} ===")
+
+        run_exit_code = run_single_config(config)
+        if run_exit_code == EXIT_SYSTEM_ERROR:
+            exit_code = EXIT_SYSTEM_ERROR
+        elif run_exit_code == EXIT_VALIDATION_FAIL and exit_code == EXIT_OK:
+            exit_code = EXIT_VALIDATION_FAIL
+
+    return exit_code
+
+
+def run_single_config(config: ValidationConfig) -> int:
+    """Run one validation configuration and print/report its results."""
+
     try:
         # Validation happens before parsing so unsupported combinations fail
         # early with CONFIG_ERROR rather than producing confusing parser/DUT
@@ -435,6 +498,346 @@ def main(argv: list[str] | None = None) -> int:
     except UnsupportedTestError as exc:
         print(f"UNSUPPORTED_TEST: {exc}", file=sys.stderr)
         return EXIT_SYSTEM_ERROR
+
+
+def run_interactive_wizard(input_func=None) -> int:
+    """Collect validation settings step by step and run selected vectors.
+
+    Args:
+        input_func: Optional input function for tests. Defaults to ``input``.
+
+    Returns:
+        Aggregated validation exit code.
+    """
+
+    if input_func is None:
+        input_func = input
+
+    try:
+        print(textwrap.dedent(INTERACTIVE_INTRO).strip())
+        print()
+
+        algorithm = _prompt_select(
+            "Which algorithm are you testing?",
+            ["AES"],
+            default="AES",
+            input_func=input_func,
+        )
+
+        test_type = _prompt_select(
+            "Which test type are you running?",
+            ["KAT"],
+            default="KAT",
+            input_func=input_func,
+        )
+
+        operation = _prompt_select(
+            "Which operation should be validated?",
+            ["encrypt", "decrypt"],
+            default="encrypt",
+            input_func=input_func,
+        )
+
+        source_kind = _prompt_select(
+            "Where are the vector files?",
+            ["single file", "folder of .rsp files"],
+            default="single file",
+            input_func=input_func,
+        )
+
+        if source_kind == "single file":
+            configs = _interactive_single_file_configs(
+                algorithm=algorithm,
+                operation=operation,
+                test_type=test_type,
+                input_func=input_func,
+            )
+        else:
+            configs = _interactive_folder_configs(
+                algorithm=algorithm,
+                operation=operation,
+                test_type=test_type,
+                input_func=input_func,
+            )
+
+        if not configs:
+            return EXIT_SYSTEM_ERROR
+
+        dut = _prompt_select(
+            "Which DUT backend should be used?",
+            ["python"],
+            default="python",
+            input_func=input_func,
+        )
+        report_format = _prompt_select(
+            "Which report format should be generated?",
+            ["json", "console"],
+            default="json",
+            input_func=input_func,
+        )
+        default_report_dir = "reports"
+        report_dir = _prompt_text(
+            f"Where should reports be written? [{default_report_dir}]",
+            input_func=input_func,
+            default=default_report_dir,
+        )
+        fail_fast = _prompt_yes_no(
+            "Stop after the first failing test? [y/N]",
+            input_func=input_func,
+            default=False,
+        )
+
+        final_configs = [
+            ValidationConfig(
+                algorithm=config.algorithm,
+                mode=config.mode,
+                operation=config.operation,
+                test_type=config.test_type,
+                vector_file=config.vector_file,
+                vector_format=config.vector_format,
+                dut=dut,
+                report_format=report_format,
+                report_dir=report_dir,
+                fail_fast=fail_fast,
+                include_sensitive=False,
+            )
+            for config in configs
+        ]
+
+        _print_run_plan(final_configs)
+        if not _prompt_yes_no("Run validation now? [Y/n]", input_func=input_func, default=True):
+            print("Validation cancelled.")
+            return EXIT_SYSTEM_ERROR
+
+    except (EOFError, KeyboardInterrupt):
+        print()
+        print("Interactive validation cancelled.")
+        return EXIT_SYSTEM_ERROR
+
+    return run_configs(final_configs)
+
+
+def _interactive_single_file_configs(
+    algorithm: str,
+    operation: str,
+    test_type: str,
+    input_func,
+) -> list[ValidationConfig]:
+    """Collect settings for a single vector file."""
+
+    while True:
+        vector_file = _prompt_text("Enter the vector file path", input_func=input_func)
+        path = Path(vector_file)
+        unsupported_reason = _unsupported_mode_reason(path)
+        if unsupported_reason:
+            print(f"That file looks unsupported: {unsupported_reason}")
+            print("Choose an AES ECB/CBC/CTR .rsp file for the current MVP.")
+            continue
+        break
+
+    inferred_mode = _infer_aes_mode_from_path(path)
+    if inferred_mode:
+        use_inferred = _prompt_yes_no(
+            f"Detected AES mode {inferred_mode} from filename. Use it? [Y/n]",
+            input_func=input_func,
+            default=True,
+        )
+        mode = inferred_mode if use_inferred else _prompt_aes_mode(input_func)
+    else:
+        mode = _prompt_aes_mode(input_func)
+
+    return [
+        _build_config_shell(
+            algorithm=algorithm,
+            mode=mode,
+            operation=operation,
+            test_type=test_type,
+            vector_file=str(path),
+        )
+    ]
+
+
+def _interactive_folder_configs(
+    algorithm: str,
+    operation: str,
+    test_type: str,
+    input_func,
+) -> list[ValidationConfig]:
+    """Collect settings and discover runnable vector files from a folder."""
+
+    folder = Path(_prompt_text("Enter the folder path", input_func=input_func))
+    mode_choice = _prompt_select(
+        "How should AES mode be selected for files in this folder?",
+        ["auto-detect from filename", "force ECB", "force CBC", "force CTR"],
+        default="auto-detect from filename",
+        input_func=input_func,
+    )
+
+    forced_mode = None
+    if mode_choice.startswith("force "):
+        forced_mode = mode_choice.removeprefix("force ").upper()
+
+    files = sorted(folder.rglob("*.rsp"))
+    if not files:
+        print(f"No .rsp files found under: {folder}", file=sys.stderr)
+        return []
+
+    configs: list[ValidationConfig] = []
+    skipped: list[tuple[Path, str]] = []
+
+    for file_path in files:
+        unsupported_reason = _unsupported_mode_reason(file_path)
+        if unsupported_reason:
+            skipped.append((file_path, unsupported_reason))
+            continue
+
+        mode = forced_mode or _infer_aes_mode_from_path(file_path)
+        if mode is None:
+            skipped.append((file_path, "could not infer ECB/CBC/CTR from filename"))
+            continue
+
+        configs.append(
+            _build_config_shell(
+                algorithm=algorithm,
+                mode=mode,
+                operation=operation,
+                test_type=test_type,
+                vector_file=str(file_path),
+            )
+        )
+
+    print(f"Discovered {len(files)} .rsp file(s).")
+    print(f"Runnable with current MVP: {len(configs)}")
+    if skipped:
+        print(f"Skipped unsupported/unknown files: {len(skipped)}")
+        for file_path, reason in skipped[:10]:
+            print(f"  - {file_path}: {reason}")
+        if len(skipped) > 10:
+            print(f"  ... {len(skipped) - 10} more skipped files")
+
+    return configs
+
+
+def _build_config_shell(
+    algorithm: str,
+    mode: str,
+    operation: str,
+    test_type: str,
+    vector_file: str,
+) -> ValidationConfig:
+    """Build a partial config; wizard fills DUT/report settings later."""
+
+    return ValidationConfig(
+        algorithm=algorithm,
+        mode=mode,
+        operation=operation,
+        test_type=test_type,
+        vector_file=vector_file,
+        vector_format="rsp",
+        dut="python",
+        report_format="json",
+        report_dir="reports",
+    )
+
+
+def _prompt_aes_mode(input_func) -> str:
+    """Prompt for an explicitly supported AES mode."""
+
+    return _prompt_select(
+        "Which AES mode does this vector file use?",
+        list(SUPPORTED_AES_MODES),
+        default="CBC",
+        input_func=input_func,
+    )
+
+
+def _prompt_select(prompt: str, options: list[str], default: str, input_func) -> str:
+    """Prompt for one option using numbers or names."""
+
+    normalized_default = default.lower()
+    while True:
+        print(prompt)
+        for index, option in enumerate(options, start=1):
+            suffix = " (default)" if option.lower() == normalized_default else ""
+            print(f"  {index}. {option}{suffix}")
+
+        answer = input_func("> ").strip()
+        if not answer:
+            return default
+
+        if answer.isdigit():
+            index = int(answer)
+            if 1 <= index <= len(options):
+                return options[index - 1]
+
+        for option in options:
+            if answer.lower() == option.lower():
+                return option
+
+        print("Invalid selection. Enter a number or one of the shown options.")
+
+
+def _prompt_text(prompt: str, input_func, default: str | None = None) -> str:
+    """Prompt for free text with optional default."""
+
+    while True:
+        print(prompt)
+        answer = input_func("> ").strip()
+        if answer:
+            return answer
+        if default is not None:
+            return default
+        print("This value is required.")
+
+
+def _prompt_yes_no(prompt: str, input_func, default: bool) -> bool:
+    """Prompt for a yes/no answer."""
+
+    while True:
+        print(prompt)
+        answer = input_func("> ").strip().lower()
+        if not answer:
+            return default
+        if answer in {"y", "yes"}:
+            return True
+        if answer in {"n", "no"}:
+            return False
+        print("Enter y or n.")
+
+
+def _infer_aes_mode_from_path(path: Path) -> str | None:
+    """Infer ECB/CBC/CTR from a vector filename."""
+
+    name = path.name.upper()
+    for mode in SUPPORTED_AES_MODES:
+        if mode in name:
+            return mode
+    return None
+
+
+def _unsupported_mode_reason(path: Path) -> str | None:
+    """Return why a vector filename appears unsupported, if known."""
+
+    name = path.name.upper()
+    for token in UNSUPPORTED_AES_MODE_TOKENS:
+        if token in name:
+            return f"AES-{token} is not supported yet"
+    return None
+
+
+def _print_run_plan(configs: list[ValidationConfig]) -> None:
+    """Print a compact summary before executing wizard-selected runs."""
+
+    print()
+    print("Run plan")
+    print("--------")
+    for index, config in enumerate(configs[:10], start=1):
+        print(
+            f"{index}. {config.algorithm}-{config.mode} {config.operation} "
+            f"{config.test_type}: {config.vector_file}"
+        )
+    if len(configs) > 10:
+        print(f"... {len(configs) - 10} more file(s)")
 
 
 if __name__ == "__main__":
