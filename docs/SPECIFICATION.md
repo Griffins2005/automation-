@@ -37,6 +37,19 @@ CLI arguments
   -> exit code
 ```
 
+The CLI arguments provide run configuration. The vector file provides test data.
+
+Users should not type vector values such as `KEY`, `IV`, `PLAINTEXT`, or
+`CIPHERTEXT` directly into the terminal. Those values belong inside the `.rsp`
+file referenced by `--vector-file`.
+
+Discovery commands:
+
+```bash
+python -m crypto_validation --list-supported
+python -m crypto_validation --show-format
+```
+
 ## 3. Data Contracts
 
 ### 3.1 ValidationConfig
@@ -56,6 +69,24 @@ Required fields:
 | `dut` | DUT backend | `python` |
 | `report_format` | File report type | `json` |
 | `report_dir` | Report output directory | `reports` |
+
+Required terminal arguments for a validation run:
+
+```text
+--algorithm
+--mode
+--vector-file
+```
+
+Commonly specified optional arguments:
+
+```text
+--operation
+--test-type
+--dut
+--report-format
+--report-dir
+```
 
 ### 3.2 TestCase
 
@@ -157,6 +188,46 @@ The parser does not:
 - Run cryptographic algorithms.
 - Decide pass/fail.
 - Enforce AES key length or block size. The DUT handles that.
+
+### 5.1 Supported `.rsp` Examples
+
+AES-CBC/CTR encrypt:
+
+```text
+[ENCRYPT]
+COUNT = 0
+KEY = <hex>
+IV = <hex>
+PLAINTEXT = <hex>
+CIPHERTEXT = <hex>
+```
+
+AES-CBC/CTR decrypt:
+
+```text
+[DECRYPT]
+COUNT = 0
+KEY = <hex>
+IV = <hex>
+CIPHERTEXT = <hex>
+PLAINTEXT = <hex>
+```
+
+AES-ECB records omit `IV`.
+
+### 5.2 Explicitly Unsupported in MVP
+
+The MVP does not yet support:
+
+- AES-CFB
+- AES-OFB
+- bit-level CFB1 vectors
+- Monte Carlo Tests
+- SHA/HMAC/RSA/ECC/DRBG
+- ACVP JSON
+
+For example, a file named `CFB1VarKey256.rsp` is an AES-CFB1 vector file and is
+outside the current MVP support matrix.
 
 ## 6. Reporting Rules
 
