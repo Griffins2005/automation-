@@ -44,7 +44,7 @@ def test_cli_without_arguments_starts_interactive_single_file_wizard(monkeypatch
         [
             "",  # algorithm: AES
             "",  # test type: KAT
-            "",  # operation: encrypt
+            "2",  # operation: encrypt
             "",  # source kind: single file
             "sample_vectors/aes/aes_cbc_128.rsp",
             "",  # use detected CBC mode
@@ -128,7 +128,7 @@ def test_interactive_folder_wizard_skips_unsupported_cfb_files(tmp_path, monkeyp
         [
             "",  # algorithm: AES
             "",  # test type: KAT
-            "",  # operation: encrypt
+            "2",  # operation: encrypt
             "2",  # source kind: folder
             str(vector_dir),
             "",  # mode handling: auto-detect
@@ -160,7 +160,7 @@ def test_interactive_folder_wizard_skips_forced_mode_mismatches(tmp_path, monkey
         [
             "",  # algorithm: AES
             "",  # test type: KAT
-            "",  # operation: encrypt
+            "2",  # operation: encrypt
             "2",  # source kind: folder
             str(vector_dir),
             "3",  # force CBC
@@ -191,7 +191,7 @@ def test_folder_wizard_prints_global_summary(tmp_path, monkeypatch, capsys):
         [
             "",  # algorithm: AES
             "",  # test type: KAT
-            "",  # operation: encrypt
+            "2",  # operation: encrypt
             "2",  # source kind: folder
             str(vector_dir),
             "",  # auto-detect
@@ -299,3 +299,41 @@ def test_cli_runs_aes_ctr_encrypt_end_to_end(tmp_path):
     assert exit_code == EXIT_OK
     payload = json.loads(next(tmp_path.glob("*.json")).read_text(encoding="utf-8"))
     assert payload["summary"]["passed"] == 2
+
+
+def test_folder_wizard_auto_detects_mixed_encrypt_decrypt_files(tmp_path, monkeypatch, capsys):
+    vector_dir = tmp_path / "failure_injection"
+    vector_dir.mkdir()
+    shutil.copy(
+        "sample_vectors/aes/failure_injection/cbc_encrypt_bad_ciphertext.rsp",
+        vector_dir / "cbc_encrypt_bad_ciphertext.rsp",
+    )
+    shutil.copy(
+        "sample_vectors/aes/failure_injection/cbc_decrypt_bad_plaintext.rsp",
+        vector_dir / "cbc_decrypt_bad_plaintext.rsp",
+    )
+
+    answers = iter(
+        [
+            "",  # algorithm: AES
+            "",  # test type: KAT
+            "",  # operation: auto-detect from file
+            "2",  # source kind: folder
+            str(vector_dir),
+            "",  # mode handling: auto-detect
+            "",  # DUT: python
+            "2",  # report format: console
+            "",  # fail fast: no
+            "",  # run now: yes
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    exit_code = main(["--interactive"])
+
+    captured = capsys.readouterr()
+    assert exit_code == EXIT_VALIDATION_FAIL
+    assert "AES-CBC encrypt KAT" in captured.out
+    assert "AES-CBC decrypt KAT" in captured.out
+    assert "PARSE_ERROR" not in captured.err
+    assert "System Errors: 0" in captured.out

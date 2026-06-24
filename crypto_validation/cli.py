@@ -615,8 +615,8 @@ def run_interactive_wizard(input_func=None) -> int:
 
         operation = _prompt_select(
             "Which operation should be validated?",
-            ["encrypt", "decrypt"],
-            default="encrypt",
+            ["auto-detect from file", "encrypt", "decrypt"],
+            default="auto-detect from file",
             input_func=input_func,
         )
 
@@ -737,14 +737,20 @@ def _interactive_single_file_configs(
     else:
         mode = _prompt_aes_mode(input_func)
 
+    operations = _resolve_operations_for_file(path, operation)
+    if not operations:
+        print("No matching operation section found. Try another file.")
+        return []
+
     return [
         _build_config_shell(
             algorithm=algorithm,
             mode=mode,
-            operation=operation,
+            operation=resolved_operation,
             test_type=test_type,
             vector_file=str(path),
         )
+        for resolved_operation in operations
     ]
 
 
@@ -786,24 +792,30 @@ def _interactive_folder_configs(
             skipped.append((file_path, unsupported_reason))
             continue
 
-        mode = forced_mode or _infer_aes_mode_from_path(file_path)
         inferred_mode = _infer_aes_mode_from_path(file_path)
         if forced_mode and inferred_mode and inferred_mode != forced_mode:
             skipped.append((file_path, f"filename mode {inferred_mode} does not match forced {forced_mode}"))
             continue
+        mode = forced_mode or inferred_mode
         if mode is None:
             skipped.append((file_path, "could not infer ECB/CBC/CTR from filename"))
             continue
 
-        configs.append(
-            _build_config_shell(
-                algorithm=algorithm,
-                mode=mode,
-                operation=operation,
-                test_type=test_type,
-                vector_file=str(file_path),
+        operations = _resolve_operations_for_file(file_path, operation)
+        if not operations:
+            skipped.append((file_path, f"no {operation} section found"))
+            continue
+
+        for resolved_operation in operations:
+            configs.append(
+                _build_config_shell(
+                    algorithm=algorithm,
+                    mode=mode,
+                    operation=resolved_operation,
+                    test_type=test_type,
+                    vector_file=str(file_path),
+                )
             )
-        )
 
     print(f"Discovered {len(files)} .rsp file(s).")
     print(f"Runnable with current MVP: {len(configs)}")
@@ -912,6 +924,35 @@ def _infer_aes_mode_from_path(path: Path) -> str | None:
         if mode in name:
             return mode
     return None
+
+
+def _resolve_operations_for_file(path: Path, operation_choice: str) -> list[str]:
+    """Resolve wizard operation choice into runnable operations for a file."""
+
+    detected = _detect_operations_in_file(path)
+    if operation_choice == "auto-detect from file":
+        return detected or ["encrypt"]
+
+    if not detected or operation_choice in detected:
+        return [operation_choice]
+
+    return []
+
+
+def _detect_operations_in_file(path: Path) -> list[str]:
+    """Return ENCRYPT/DECRYPT sections present in a vector file."""
+
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore").upper()
+    except OSError:
+        return []
+
+    operations: list[str] = []
+    if "[ENCRYPT]" in text:
+        operations.append("encrypt")
+    if "[DECRYPT]" in text:
+        operations.append("decrypt")
+    return operations
 
 
 def _unsupported_mode_reason(path: Path) -> str | None:

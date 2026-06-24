@@ -30,6 +30,10 @@ File source options:
 Folder mode scans recursively, runs supported ECB/CBC/CTR files, and skips
 unsupported files such as CFB1/OFB vectors.
 
+The operation step supports auto-detection. In folder mode, auto-detection reads
+each file's `[ENCRYPT]` and `[DECRYPT]` sections and creates the matching run
+configuration for that file.
+
 If a user forces a mode, files whose filename suggests a different supported
 mode are skipped. This prevents accidental CBC validation against CTR vectors,
 or similar incompatible combinations.
