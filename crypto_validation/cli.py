@@ -30,6 +30,8 @@ from __future__ import annotations
 import argparse
 import sys
 import textwrap
+import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from crypto_validation.config import validate_config
@@ -58,6 +60,17 @@ EXIT_SYSTEM_ERROR = 2
 AUTO_MODE = "AUTO"
 SUPPORTED_AES_MODES = ("ECB", "CBC", "CTR")
 UNSUPPORTED_AES_MODE_TOKENS = ("CFB1", "CFB8", "CFB128", "CFB", "OFB")
+
+
+@dataclass(frozen=True)
+class CliRunOutcome:
+    """CLI-level result for one validation run."""
+
+    exit_code: int
+    summary: dict[str, int]
+    elapsed_seconds: float
+    vector_file: str
+    report_path: str | None = None
 
 CLI_GUIDANCE = """
 Current MVP support
@@ -434,24 +447,31 @@ def run_configs(configs: list[ValidationConfig]) -> int:
         print("No runnable vector files were selected.", file=sys.stderr)
         return EXIT_SYSTEM_ERROR
 
+    outcomes: list[CliRunOutcome] = []
     exit_code = EXIT_OK
+    batch_start = time.perf_counter()
     for index, config in enumerate(configs, start=1):
         if len(configs) > 1:
             print()
             print(f"=== Validation run {index}/{len(configs)}: {config.vector_file} ===")
 
-        run_exit_code = run_single_config(config)
-        if run_exit_code == EXIT_SYSTEM_ERROR:
+        outcome = run_single_config(config)
+        outcomes.append(outcome)
+        if outcome.exit_code == EXIT_SYSTEM_ERROR:
             exit_code = EXIT_SYSTEM_ERROR
-        elif run_exit_code == EXIT_VALIDATION_FAIL and exit_code == EXIT_OK:
+        elif outcome.exit_code == EXIT_VALIDATION_FAIL and exit_code == EXIT_OK:
             exit_code = EXIT_VALIDATION_FAIL
+
+    if len(outcomes) > 1:
+        _print_global_summary(outcomes, time.perf_counter() - batch_start)
 
     return exit_code
 
 
-def run_single_config(config: ValidationConfig) -> int:
+def run_single_config(config: ValidationConfig) -> CliRunOutcome:
     """Run one validation configuration and print/report its results."""
 
+    start = time.perf_counter()
     try:
         # Validation happens before parsing so unsupported combinations fail
         # early with CONFIG_ERROR rather than producing confusing parser/DUT
@@ -473,31 +493,93 @@ def run_single_config(config: ValidationConfig) -> int:
         executor = build_executor(config)
         engine = ValidationEngine(config, executor, dut, Comparator())
         results = engine.run(test_cases)
+        elapsed_seconds = time.perf_counter() - start
 
         json_report_path = None
         if config.report_format == "json":
-            json_report_path = str(write_json_report(config, source, results))
+            json_report_path = str(write_json_report(config, source, results, elapsed_seconds=elapsed_seconds))
 
-        print_console_report(config, source, results, json_report_path)
+        print_console_report(config, source, results, json_report_path, elapsed_seconds=elapsed_seconds)
 
         summary = build_summary(results)
         # Exit code 2 takes priority over validation failures because CI should
         # distinguish "the DUT is wrong" from "the validation run was invalid".
         if has_system_errors(summary):
-            return EXIT_SYSTEM_ERROR
-        if summary["validation_failed"] > 0:
-            return EXIT_VALIDATION_FAIL
-        return EXIT_OK
+            exit_code = EXIT_SYSTEM_ERROR
+        elif summary["validation_failed"] > 0:
+            exit_code = EXIT_VALIDATION_FAIL
+        else:
+            exit_code = EXIT_OK
+
+        return CliRunOutcome(
+            exit_code=exit_code,
+            summary=summary,
+            elapsed_seconds=elapsed_seconds,
+            vector_file=config.vector_file,
+            report_path=json_report_path,
+        )
 
     except ConfigError as exc:
         print(f"CONFIG_ERROR: {exc}", file=sys.stderr)
-        return EXIT_SYSTEM_ERROR
+        return _error_outcome(config, "config_errors", start)
     except ParseError as exc:
         print(f"PARSE_ERROR: {exc}", file=sys.stderr)
-        return EXIT_SYSTEM_ERROR
+        return _error_outcome(config, "parse_errors", start)
     except UnsupportedTestError as exc:
         print(f"UNSUPPORTED_TEST: {exc}", file=sys.stderr)
-        return EXIT_SYSTEM_ERROR
+        return _error_outcome(config, "unsupported_tests", start)
+
+
+def _error_outcome(config: ValidationConfig, error_key: str, start: float) -> CliRunOutcome:
+    """Build a run outcome for a run that failed before producing test results."""
+
+    summary = {
+        "total": 0,
+        "passed": 0,
+        "validation_failed": 0,
+        "parse_errors": 0,
+        "config_errors": 0,
+        "dut_errors": 0,
+        "unsupported_tests": 0,
+        "internal_errors": 0,
+    }
+    summary[error_key] = 1
+    return CliRunOutcome(
+        exit_code=EXIT_SYSTEM_ERROR,
+        summary=summary,
+        elapsed_seconds=time.perf_counter() - start,
+        vector_file=config.vector_file,
+    )
+
+
+def _print_global_summary(outcomes: list[CliRunOutcome], elapsed_seconds: float) -> None:
+    """Print aggregate metrics for folder or multi-file validation runs."""
+
+    total_summary = {
+        "total": 0,
+        "passed": 0,
+        "validation_failed": 0,
+        "parse_errors": 0,
+        "config_errors": 0,
+        "dut_errors": 0,
+        "unsupported_tests": 0,
+        "internal_errors": 0,
+    }
+    for outcome in outcomes:
+        for key in total_summary:
+            total_summary[key] += outcome.summary.get(key, 0)
+
+    throughput = total_summary["total"] / elapsed_seconds if elapsed_seconds > 0 else 0.0
+    print()
+    print("Global Summary")
+    print("--------------")
+    print(f"Files Run: {len(outcomes)}")
+    print(f"Total Tests: {total_summary['total']}")
+    print(f"Passed: {total_summary['passed']}")
+    print(f"Validation Failures: {total_summary['validation_failed']}")
+    print(f"System Errors: {sum(total_summary[key] for key in ('parse_errors', 'config_errors', 'dut_errors', 'unsupported_tests', 'internal_errors'))}")
+    print(f"Elapsed Time: {elapsed_seconds:.4f}s")
+    print(f"Throughput: {throughput:.2f} tests/s")
 
 
 def run_interactive_wizard(input_func=None) -> int:
@@ -575,12 +657,15 @@ def run_interactive_wizard(input_func=None) -> int:
             default="json",
             input_func=input_func,
         )
-        default_report_dir = "reports"
-        report_dir = _prompt_text(
-            f"Where should reports be written? [{default_report_dir}]",
-            input_func=input_func,
-            default=default_report_dir,
-        )
+        if report_format == "json":
+            default_report_dir = "reports"
+            report_dir = _prompt_text(
+                f"Where should reports be written? [{default_report_dir}]",
+                input_func=input_func,
+                default=default_report_dir,
+            )
+        else:
+            report_dir = "reports"
         fail_fast = _prompt_yes_no(
             "Stop after the first failing test? [y/N]",
             input_func=input_func,
@@ -628,10 +713,16 @@ def _interactive_single_file_configs(
     while True:
         vector_file = _prompt_text("Enter the vector file path", input_func=input_func)
         path = Path(vector_file)
+        if not path.exists() or not path.is_file():
+            print("File not found. Try again.")
+            continue
+        if path.suffix.lower() != ".rsp":
+            print("Use a .rsp file.")
+            continue
         unsupported_reason = _unsupported_mode_reason(path)
         if unsupported_reason:
             print(f"That file looks unsupported: {unsupported_reason}")
-            print("Choose an AES ECB/CBC/CTR .rsp file for the current MVP.")
+            print("Choose ECB, CBC, or CTR.")
             continue
         break
 
@@ -665,7 +756,11 @@ def _interactive_folder_configs(
 ) -> list[ValidationConfig]:
     """Collect settings and discover runnable vector files from a folder."""
 
-    folder = Path(_prompt_text("Enter the folder path", input_func=input_func))
+    while True:
+        folder = Path(_prompt_text("Enter the folder path", input_func=input_func))
+        if folder.exists() and folder.is_dir():
+            break
+        print("Folder not found. Try again.")
     mode_choice = _prompt_select(
         "How should AES mode be selected for files in this folder?",
         ["auto-detect from filename", "force ECB", "force CBC", "force CTR"],
@@ -692,6 +787,10 @@ def _interactive_folder_configs(
             continue
 
         mode = forced_mode or _infer_aes_mode_from_path(file_path)
+        inferred_mode = _infer_aes_mode_from_path(file_path)
+        if forced_mode and inferred_mode and inferred_mode != forced_mode:
+            skipped.append((file_path, f"filename mode {inferred_mode} does not match forced {forced_mode}"))
+            continue
         if mode is None:
             skipped.append((file_path, "could not infer ECB/CBC/CTR from filename"))
             continue
@@ -774,7 +873,7 @@ def _prompt_select(prompt: str, options: list[str], default: str, input_func) ->
             if answer.lower() == option.lower():
                 return option
 
-        print("Invalid selection. Enter a number or one of the shown options.")
+        print("Invalid choice. Try again.")
 
 
 def _prompt_text(prompt: str, input_func, default: str | None = None) -> str:
@@ -787,7 +886,7 @@ def _prompt_text(prompt: str, input_func, default: str | None = None) -> str:
             return answer
         if default is not None:
             return default
-        print("This value is required.")
+        print("Required. Try again.")
 
 
 def _prompt_yes_no(prompt: str, input_func, default: bool) -> bool:

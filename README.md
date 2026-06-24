@@ -32,6 +32,15 @@ Current MVP support:
 | DUT backend | Python/PyCryptodome |
 | Reports | console, JSON |
 
+Strict AES validation is applied before DUT execution:
+
+- AES keys must be 128, 192, or 256 bits.
+- AES-CBC and AES-CTR require a 128-bit IV/counter.
+- AES-ECB must not include IV.
+- AES-ECB and AES-CBC plaintext/ciphertext must be block-aligned.
+- AES-CTR uses a 128-bit big-endian initial counter block, matching the NIST
+  SP 800-38A Appendix F.5 style sample in `sample_vectors/aes/aes_ctr_128.rsp`.
+
 ## Quick Start
 
 Install the package with development dependencies:
@@ -64,6 +73,9 @@ The wizard asks step by step:
 8. Report directory
 9. Whether to run immediately
 
+If you enter an invalid option, the wizard reprints the step with a short retry
+message. If you choose `console` reporting, it skips the report directory step.
+
 For file selection, the wizard supports:
 
 ```text
@@ -74,6 +86,11 @@ For file selection, the wizard supports:
 When folder mode is selected, the wizard scans for `.rsp` files recursively,
 auto-detects supported AES modes from filenames such as `CBCVarKey128.rsp`, and
 skips unsupported files such as `CFB1VarKey256.rsp`.
+
+If you force a mode in folder mode, files that appear to belong to another
+supported mode are skipped instead of being run with incompatible settings.
+Folder runs print a global summary with total files, tests, elapsed time, and
+throughput.
 
 ## Understand the CLI Inputs
 
@@ -161,6 +178,20 @@ python3 -m crypto_validation \
   --report-dir reports
 ```
 
+Run the sample AES-CTR encryption validation:
+
+```bash
+python3 -m crypto_validation \
+  --algorithm AES \
+  --mode CTR \
+  --operation encrypt \
+  --test-type KAT \
+  --vector-file sample_vectors/aes/aes_ctr_128.rsp \
+  --dut python \
+  --report-format json \
+  --report-dir reports
+```
+
 ## Currently Supported `.rsp` Shape
 
 AES-CBC or AES-CTR encryption records:
@@ -204,6 +235,28 @@ does not run CFB1 validation yet.
 python3 -m pytest
 ```
 
+## Manual Failure-Injection Vector Files
+
+Standalone bad `.rsp` files are available here:
+
+```text
+sample_vectors/aes/failure_injection/
+```
+
+These files are intentionally wrong and are meant for manual validation checks.
+Examples:
+
+```bash
+python3 -m crypto_validation --algorithm AES --mode CBC --operation encrypt \
+  --vector-file sample_vectors/aes/failure_injection/cbc_encrypt_bad_ciphertext.rsp
+
+python3 -m crypto_validation --algorithm AES --mode CTR --operation encrypt \
+  --vector-file sample_vectors/aes/failure_injection/ctr_encrypt_bad_counter.rsp
+```
+
+They include bad CBC, ECB, and CTR vectors with modified ciphertext, plaintext,
+key, or counter values.
+
 ## CLI Exit Codes
 
 | Code | Meaning |
@@ -211,6 +264,24 @@ python3 -m pytest
 | `0` | All tests passed |
 | `1` | One or more validation failures |
 | `2` | Config, parser, DUT, unsupported-test, or internal error |
+
+## Reports and Metrics
+
+Console reports include pass/fail counts, error counts, elapsed time, and
+throughput in tests per second.
+
+JSON report filenames include algorithm, mode, operation, test type, vector file
+stem, and a high-resolution UTC timestamp. If a name collision still occurs, the
+reporter appends a numeric suffix instead of overwriting an existing report.
+
+JSON metadata includes:
+
+- vector file path
+- vector SHA-256 checksum
+- elapsed seconds
+- throughput in tests per second
+
+Folder runs also print a global summary across all executed files.
 
 ## Project Layout
 
