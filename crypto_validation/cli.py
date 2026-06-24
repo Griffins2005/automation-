@@ -53,8 +53,9 @@ EXIT_VALIDATION_FAIL = 1
 EXIT_SYSTEM_ERROR = 2
 """Process exit code used for config, parser, DUT, or framework errors."""
 
-SUPPORTED_AES_MODES = ("ECB", "CBC", "CTR")
-UNSUPPORTED_AES_MODE_TOKENS = ("CFB1", "CFB8", "CFB128", "CFB", "OFB")
+SUPPORTED_AES_MODES = ("ECB", "CBC", "CTR", "CFB1", "CFB8", "CFB128", "OFB")
+AES_MODE_DETECTION_ORDER = ("CFB128", "CFB8", "CFB1", "ECB", "CBC", "CTR", "OFB")
+UNSUPPORTED_AES_MODE_TOKENS: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -71,7 +72,7 @@ CLI_GUIDANCE = """
 Current MVP support
 -------------------
 Algorithm:      AES
-Modes:          ECB, CBC, CTR
+Modes:          ECB, CBC, CTR, CFB1, CFB8, CFB128, OFB
 Operations:     encrypt, decrypt
 Test type:      KAT
 Vector format:  NIST-style .rsp
@@ -104,7 +105,7 @@ Show the expected .rsp vector file structure:
 
 Currently supported .rsp record shape
 -------------------------------------
-AES-CBC/CTR encrypt:
+AES modes with IV/counter encrypt:
 
   [ENCRYPT]
   COUNT = 0
@@ -113,7 +114,7 @@ AES-CBC/CTR encrypt:
   PLAINTEXT = <hex>
   CIPHERTEXT = <hex>
 
-AES-CBC/CTR decrypt:
+AES modes with IV/counter decrypt:
 
   [DECRYPT]
   COUNT = 0
@@ -122,7 +123,8 @@ AES-CBC/CTR decrypt:
   CIPHERTEXT = <hex>
   PLAINTEXT = <hex>
 
-AES-ECB is the same but without IV.
+AES-ECB is the same but without IV. AES-CFB1 uses bit strings for
+PLAINTEXT/CIPHERTEXT.
 
 Complete examples
 -----------------
@@ -150,11 +152,11 @@ Answer each prompt and the tool will build the validation command for you.
 
 Current MVP support:
   Algorithm: AES
-  Modes:     ECB, CBC, CTR
+  Modes:     ECB, CBC, CTR, CFB1, CFB8, CFB128, OFB
   Test type: KAT
   Format:    .rsp
 
-Note: AES-CFB/CFB1/OFB files are not supported by this MVP yet.
+Note: AES-CFB1 vectors use bit strings instead of byte-oriented hex payloads.
 """
 
 
@@ -165,9 +167,13 @@ Supported MVP configuration
   AES
 
 --mode:
-  ECB  - AES Electronic Codebook. Vector records must NOT include IV.
-  CBC  - AES Cipher Block Chaining. Vector records must include IV.
-  CTR  - AES Counter mode. Vector records must include IV.
+  ECB    - Electronic Codebook. Vector records must NOT include IV.
+  CBC    - Cipher Block Chaining. Requires 128-bit IV and block-aligned data.
+  CTR    - Counter mode. Requires 128-bit initial counter.
+  CFB1   - 1-bit Cipher Feedback. Requires 128-bit IV and bit-string data.
+  CFB8   - 8-bit Cipher Feedback. Requires 128-bit IV and byte-aligned data.
+  CFB128 - 128-bit Cipher Feedback. Requires 128-bit IV and block-aligned data.
+  OFB    - Output Feedback. Requires 128-bit IV and byte-aligned data.
 
 --operation:
   encrypt - uses PLAINTEXT as DUT input and CIPHERTEXT as expected output.
@@ -199,7 +205,7 @@ Supported .rsp vector format
 Records are key/value pairs. A blank line or a new COUNT starts a new test case.
 Hex values may be uppercase or lowercase. Spaces inside hex values are removed.
 
-AES-CBC or AES-CTR encrypt:
+AES modes with IV/counter encrypt:
 
   [ENCRYPT]
   COUNT = 0
@@ -208,7 +214,7 @@ AES-CBC or AES-CTR encrypt:
   PLAINTEXT = 6bc1bee22e409f96e93d7e117393172a
   CIPHERTEXT = 7649abac8119b246cee98e9b12e9197d
 
-AES-CBC or AES-CTR decrypt:
+AES modes with IV/counter decrypt:
 
   [DECRYPT]
   COUNT = 0
@@ -221,13 +227,13 @@ AES-ECB encrypt/decrypt:
 
   Same fields, but omit IV.
 
+AES-CFB1 encrypt/decrypt:
+
+  Same fields as IV-based modes, but PLAINTEXT/CIPHERTEXT are bit strings.
+
 Currently not supported
 -----------------------
-The MVP does not yet support AES-CFB, AES-OFB, bit-level vectors such as CFB1,
-Monte Carlo Tests, SHA/HMAC/RSA/ECC/DRBG, or ACVP JSON.
-
-If your vector file is named like CFB1VarKey256.rsp, it is an AES-CFB1 vector.
-That mode is not supported by the current MVP yet.
+The MVP does not yet support Monte Carlo Tests, SHA/HMAC/RSA/ECC/DRBG, or ACVP JSON.
 """
 
 
@@ -297,8 +303,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--mode",
         type=str.upper,
-        choices=["ECB", "CBC", "CTR"],
-        help="AES mode. Currently supported: ECB, CBC, CTR.",
+        choices=list(SUPPORTED_AES_MODES),
+        help="AES mode. Supported: ECB, CBC, CTR, CFB1, CFB8, CFB128, OFB.",
     )
     parser.add_argument(
         "--operation",
@@ -764,7 +770,7 @@ def _interactive_folder_configs(
         print("Folder not found. Try again.")
     mode_choice = _prompt_select(
         "How should AES mode be selected for files in this folder?",
-        ["auto-detect from filename", "force ECB", "force CBC", "force CTR"],
+        ["auto-detect from filename", *[f"force {mode}" for mode in SUPPORTED_AES_MODES]],
         default="auto-detect from filename",
         input_func=input_func,
     )
@@ -793,7 +799,7 @@ def _interactive_folder_configs(
             continue
         mode = forced_mode or inferred_mode
         if mode is None:
-            skipped.append((file_path, "could not infer ECB/CBC/CTR from filename"))
+            skipped.append((file_path, "could not infer supported AES mode from filename"))
             continue
 
         operations = _resolve_operations_for_file(file_path, operation)
@@ -915,7 +921,7 @@ def _infer_aes_mode_from_path(path: Path) -> str | None:
     """Infer ECB/CBC/CTR from a vector filename."""
 
     name = path.name.upper()
-    for mode in SUPPORTED_AES_MODES:
+    for mode in AES_MODE_DETECTION_ORDER:
         if mode in name:
             return mode
     return None

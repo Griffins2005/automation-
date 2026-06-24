@@ -28,8 +28,8 @@ File source options:
 1. a single `.rsp` vector file
 2. a folder containing `.rsp` vector files
 
-Folder mode scans recursively, runs supported ECB/CBC/CTR files, and skips
-unsupported files such as CFB1/OFB vectors.
+Folder mode scans recursively, runs supported AES mode files, and skips files
+whose mode cannot be inferred.
 
 The operation step supports auto-detection. In folder mode, auto-detection reads
 each file's `[ENCRYPT]` and `[DECRYPT]` sections and creates the matching run
@@ -175,6 +175,10 @@ Supported modes:
 - ECB
 - CBC
 - CTR
+- CFB1
+- CFB8
+- CFB128
+- OFB
 
 Supported operations:
 

@@ -11,7 +11,7 @@ vectors.
 Current MVP:
 
 - Algorithm: AES
-- Modes: ECB, CBC, CTR
+- Modes: ECB, CBC, CTR, CFB1, CFB8, CFB128, OFB
 - Operations: encrypt, decrypt
 - Test type: KAT
 - Vector format: `.rsp`
@@ -195,6 +195,27 @@ Important statuses:
 - CTR payloads do not need to be block-aligned.
 - Future ACVP vectors may require explicit nonce/counter metadata.
 
+### AES-CFB1
+
+- Requires a 128-bit IV.
+- Plaintext and ciphertext are bit strings.
+- The shift register is updated one bit at a time with ciphertext bits.
+
+### AES-CFB8
+
+- Requires a 128-bit IV.
+- Plaintext and ciphertext must be byte-aligned.
+
+### AES-CFB128
+
+- Requires a 128-bit IV.
+- Plaintext and ciphertext must be block-aligned.
+
+### AES-OFB
+
+- Requires a 128-bit IV.
+- Plaintext and ciphertext must be byte-aligned.
+
 ### AES Key Sizes
 
 All AES modes require keys of 128, 192, or 256 bits.
@@ -221,7 +242,7 @@ The parser does not:
 
 ### 5.1 Supported `.rsp` Examples
 
-AES-CBC/CTR encrypt:
+IV/counter-based AES encrypt:
 
 ```text
 [ENCRYPT]
@@ -232,7 +253,7 @@ PLAINTEXT = <hex>
 CIPHERTEXT = <hex>
 ```
 
-AES-CBC/CTR decrypt:
+IV/counter-based AES decrypt:
 
 ```text
 [DECRYPT]
@@ -245,19 +266,17 @@ PLAINTEXT = <hex>
 
 AES-ECB records omit `IV`.
 
+AES-CFB1 records use bit strings for `PLAINTEXT` and `CIPHERTEXT`.
+
 ### 5.2 Explicitly Unsupported in MVP
 
 The MVP does not yet support:
 
-- AES-CFB
-- AES-OFB
-- bit-level CFB1 vectors
 - Monte Carlo Tests
 - SHA/HMAC/RSA/ECC/DRBG
 - ACVP JSON
 
-For example, a file named `CFB1VarKey256.rsp` is an AES-CFB1 vector file and is
-outside the current MVP support matrix.
+AES-CFB1, AES-CFB8, AES-CFB128, and AES-OFB are supported for KAT vectors.
 
 ## 6. Reporting Rules
 
@@ -306,6 +325,10 @@ Current failure-injection coverage includes:
 - CBC encrypt and decrypt
 - ECB encrypt and decrypt
 - CTR encrypt and decrypt
+- CFB1 encrypt and decrypt
+- CFB8 encrypt
+- CFB128 encrypt
+- OFB encrypt
 - CTR modified key
 - CTR modified counter block
 

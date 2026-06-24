@@ -7,11 +7,11 @@ from crypto_validation.parsers.rsp import RspParser
 from crypto_validation.vectors import build_vector_source, load_vector_text
 
 
-def _config(operation: str = "encrypt") -> ValidationConfig:
+def _config(operation: str = "encrypt", mode: str = "CBC") -> ValidationConfig:
     return validate_config(
         ValidationConfig(
             algorithm="AES",
-            mode="CBC",
+            mode=mode,
             operation=operation,
             test_type="KAT",
             vector_file="sample_vectors/aes/aes_cbc_128.rsp",
@@ -112,6 +112,84 @@ CIPHERTEXT = 7649abac8119b246cee98e9b12e9197d
 
 def test_rsp_parser_rejects_unaligned_cbc_payload():
     config = _config("encrypt")
+    source = build_vector_source(Path(config.vector_file), config.vector_format)
+    content = """
+[ENCRYPT]
+COUNT = 0
+KEY = 2b7e151628aed2a6abf7158809cf4f3c
+IV = 000102030405060708090a0b0c0d0e0f
+PLAINTEXT = 00
+CIPHERTEXT = 00
+"""
+
+    try:
+        list(RspParser().parse(content, config, source))
+    except ParseError as exc:
+        assert "block-aligned" in str(exc)
+    else:
+        raise AssertionError("Expected ParseError")
+
+
+def test_rsp_parser_accepts_cfb1_bit_string_payload():
+    config = _config("encrypt", mode="CFB1")
+    source = build_vector_source(Path(config.vector_file), config.vector_format)
+    content = """
+[ENCRYPT]
+COUNT = 0
+KEY = 8000000000000000000000000000000000000000000000000000000000000000
+IV = 00000000000000000000000000000000
+PLAINTEXT = 0
+CIPHERTEXT = 1
+"""
+
+    cases = list(RspParser().parse(content, config, source))
+
+    assert cases[0].input["plaintext"] == "0"
+    assert cases[0].expected_output == {"ciphertext": "1"}
+
+
+def test_rsp_parser_rejects_non_bit_cfb1_payload():
+    config = _config("encrypt", mode="CFB1")
+    source = build_vector_source(Path(config.vector_file), config.vector_format)
+    content = """
+[ENCRYPT]
+COUNT = 0
+KEY = 8000000000000000000000000000000000000000000000000000000000000000
+IV = 00000000000000000000000000000000
+PLAINTEXT = 2
+CIPHERTEXT = 1
+"""
+
+    try:
+        list(RspParser().parse(content, config, source))
+    except ParseError as exc:
+        assert "bit string" in str(exc)
+    else:
+        raise AssertionError("Expected ParseError")
+
+
+def test_rsp_parser_rejects_unaligned_cfb8_payload():
+    config = _config("encrypt", mode="CFB8")
+    source = build_vector_source(Path(config.vector_file), config.vector_format)
+    content = """
+[ENCRYPT]
+COUNT = 0
+KEY = 2b7e151628aed2a6abf7158809cf4f3c
+IV = 000102030405060708090a0b0c0d0e0f
+PLAINTEXT = f
+CIPHERTEXT = a
+"""
+
+    try:
+        list(RspParser().parse(content, config, source))
+    except ParseError as exc:
+        assert "byte-aligned" in str(exc)
+    else:
+        raise AssertionError("Expected ParseError")
+
+
+def test_rsp_parser_rejects_unaligned_cfb128_payload():
+    config = _config("encrypt", mode="CFB128")
     source = build_vector_source(Path(config.vector_file), config.vector_format)
     content = """
 [ENCRYPT]

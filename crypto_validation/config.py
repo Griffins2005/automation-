@@ -18,7 +18,7 @@ from crypto_validation.models import ValidationConfig
 
 
 SUPPORTED_ALGORITHMS = {"AES"}
-SUPPORTED_AES_MODES = {"ECB", "CBC", "CTR"}
+SUPPORTED_AES_MODES = {"ECB", "CBC", "CTR", "CFB1", "CFB8", "CFB128", "OFB"}
 SUPPORTED_OPERATIONS = {"encrypt", "decrypt"}
 SUPPORTED_TEST_TYPES = {"KAT"}
 SUPPORTED_VECTOR_FORMATS = {"rsp"}

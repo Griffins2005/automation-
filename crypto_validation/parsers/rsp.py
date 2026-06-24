@@ -3,7 +3,8 @@
 The parser converts line-oriented CAVP records into ``TestCase`` objects and
 separates DUT inputs from golden expected outputs. For AES KAT records it also
 enforces mode-level requirements before DUT execution, including key size,
-IV/counter size, ECB IV absence, and CBC/ECB block alignment.
+IV/counter size, ECB IV absence, byte/bit alignment, and block alignment where
+the mode requires full blocks.
 """
 
 from __future__ import annotations
@@ -30,8 +31,11 @@ HEX_FIELDS = {
 }
 """Fields that should be treated as hexadecimal values when parsing."""
 
-AES_KEY_BYTE_LENGTHS = {16, 24, 32}
 AES_BLOCK_BYTES = 16
+AES_KEY_BYTE_LENGTHS = {16, 24, 32}
+AES_IV_MODES = {"CBC", "CTR", "CFB1", "CFB8", "CFB128", "OFB"}
+AES_BLOCK_ALIGNED_MODES = {"ECB", "CBC", "CFB128"}
+AES_BYTE_ALIGNED_STREAM_MODES = {"CTR", "CFB8", "OFB"}
 
 
 class RspParser(VectorParser):
@@ -187,8 +191,9 @@ class RspParser(VectorParser):
             "key": self._require(record, "key", test_id),
         }
 
-        if config.mode != "ECB":
-            # ECB is stateless and has no IV. CBC and CTR need IV/counter input.
+        if config.mode in AES_IV_MODES:
+            # ECB is stateless. All other currently supported AES modes use
+            # a full block-sized IV or initial counter.
             input_data["iv"] = self._require(record, "iv", test_id)
 
         if operation == "encrypt":
@@ -255,7 +260,7 @@ class RspParser(VectorParser):
         if config.mode == "ECB" and "iv" in record:
             raise ParseError(f"COUNT {test_id}: AES-ECB vectors must not include IV")
 
-        if config.mode in {"CBC", "CTR"}:
+        if config.mode in AES_IV_MODES:
             iv = bytes.fromhex(input_data["iv"])
             if len(iv) != AES_BLOCK_BYTES:
                 raise ParseError(f"COUNT {test_id}: AES-{config.mode} IV/counter must be 128 bits")
@@ -267,7 +272,17 @@ class RspParser(VectorParser):
             if field in {"plaintext", "ciphertext"}
         ]
 
-        if config.mode in {"ECB", "CBC"}:
+        if config.mode == "CFB1":
+            for value in payload_hex_values:
+                if not value or any(bit not in {"0", "1"} for bit in value):
+                    raise ParseError(f"COUNT {test_id}: AES-CFB1 data must be a bit string")
+            return
+
+        for value in payload_hex_values:
+            if len(value) % 2 != 0:
+                raise ParseError(f"COUNT {test_id}: AES-{config.mode} data must be byte-aligned")
+
+        if config.mode in AES_BLOCK_ALIGNED_MODES:
             for value in payload_hex_values:
                 if len(bytes.fromhex(value)) % AES_BLOCK_BYTES != 0:
                     raise ParseError(f"COUNT {test_id}: AES-{config.mode} data must be block-aligned")
@@ -299,6 +314,11 @@ class RspParser(VectorParser):
         normalized = value.replace(" ", "").lower()
         if normalized == "":
             return normalized
+
+        if field in {"plaintext", "ciphertext"} and len(normalized) % 2 != 0:
+            if all(character in "0123456789abcdef" for character in normalized):
+                return normalized
+            raise ParseError(f"Invalid hex value at line {line_number}")
 
         if len(normalized) % 2 != 0:
             raise ParseError(f"Invalid odd-length hex value at line {line_number}")

@@ -2,6 +2,8 @@ import json
 import shutil
 from pathlib import Path
 
+import pytest
+
 from crypto_validation.cli import EXIT_OK, EXIT_SYSTEM_ERROR, EXIT_VALIDATION_FAIL, main
 
 
@@ -115,11 +117,11 @@ def test_cli_accepts_lowercase_supported_values(tmp_path):
     assert exit_code == EXIT_OK
 
 
-def test_interactive_folder_wizard_skips_unsupported_cfb_files(tmp_path, monkeypatch, capsys):
+def test_interactive_folder_wizard_skips_unknown_mode_files(tmp_path, monkeypatch, capsys):
     vector_dir = tmp_path / "vectors"
     vector_dir.mkdir()
     shutil.copy("sample_vectors/aes/aes_cbc_128.rsp", vector_dir / "CBCVarKey128.rsp")
-    (vector_dir / "CFB1VarKey256.rsp").write_text(
+    (vector_dir / "XTSVarKey256.rsp").write_text(
         "[ENCRYPT]\nCOUNT = 0\nKEY = 00\nIV = 00\nPLAINTEXT = 0\nCIPHERTEXT = 1\n",
         encoding="utf-8",
     )
@@ -147,7 +149,7 @@ def test_interactive_folder_wizard_skips_unsupported_cfb_files(tmp_path, monkeyp
     assert exit_code == EXIT_OK
     assert "Runnable with current MVP: 1" in captured.out
     assert "Skipped unsupported/unknown files: 1" in captured.out
-    assert "AES-CFB1 is not supported yet" in captured.out
+    assert "could not infer supported AES mode" in captured.out
 
 
 def test_interactive_folder_wizard_skips_forced_mode_mismatches(tmp_path, monkeypatch, capsys):
@@ -301,6 +303,46 @@ def test_cli_runs_aes_ctr_encrypt_end_to_end(tmp_path):
     assert payload["summary"]["passed"] == 2
 
 
+@pytest.mark.parametrize(
+    ("mode", "operation", "vector_file"),
+    [
+        ("CFB128", "encrypt", "sample_vectors/aes/aes_cfb128_128.rsp"),
+        ("CFB128", "decrypt", "sample_vectors/aes/aes_cfb128_128.rsp"),
+        ("CFB8", "encrypt", "sample_vectors/aes/aes_cfb8_128.rsp"),
+        ("CFB8", "decrypt", "sample_vectors/aes/aes_cfb8_128.rsp"),
+        ("OFB", "encrypt", "sample_vectors/aes/aes_ofb_128.rsp"),
+        ("OFB", "decrypt", "sample_vectors/aes/aes_ofb_128.rsp"),
+        ("CFB1", "encrypt", "sample_vectors/aes/aes_cfb1_256.rsp"),
+        ("CFB1", "decrypt", "sample_vectors/aes/aes_cfb1_256.rsp"),
+    ],
+)
+def test_cli_runs_additional_aes_modes(tmp_path, mode, operation, vector_file):
+    exit_code = main(
+        [
+            "--algorithm",
+            "AES",
+            "--mode",
+            mode,
+            "--operation",
+            operation,
+            "--test-type",
+            "KAT",
+            "--vector-file",
+            vector_file,
+            "--dut",
+            "python",
+            "--report-format",
+            "json",
+            "--report-dir",
+            str(tmp_path),
+        ]
+    )
+
+    assert exit_code == EXIT_OK
+    payload = json.loads(next(tmp_path.glob("*.json")).read_text(encoding="utf-8"))
+    assert payload["summary"]["passed"] == 1
+
+
 def test_folder_wizard_auto_detects_mixed_encrypt_decrypt_files(tmp_path, monkeypatch, capsys):
     vector_dir = tmp_path / "failure_injection"
     vector_dir.mkdir()
@@ -337,3 +379,32 @@ def test_folder_wizard_auto_detects_mixed_encrypt_decrypt_files(tmp_path, monkey
     assert "AES-CBC decrypt KAT" in captured.out
     assert "PARSE_ERROR" not in captured.err
     assert "System Errors: 0" in captured.out
+
+
+def test_folder_wizard_detects_cfb128_before_cfb1(tmp_path, monkeypatch, capsys):
+    vector_dir = tmp_path / "vectors"
+    vector_dir.mkdir()
+    shutil.copy("sample_vectors/aes/aes_cfb128_128.rsp", vector_dir / "CFB128VarKey128.rsp")
+
+    answers = iter(
+        [
+            "",  # algorithm: AES
+            "",  # test type: KAT
+            "2",  # operation: encrypt
+            "2",  # source kind: folder
+            str(vector_dir),
+            "",  # auto-detect mode
+            "",  # DUT: python
+            "2",  # report format: console
+            "",  # fail fast: no
+            "",  # run now: yes
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    exit_code = main(["--interactive"])
+
+    captured = capsys.readouterr()
+    assert exit_code == EXIT_OK
+    assert "AES-CFB128 encrypt KAT" in captured.out
+    assert "AES-CFB1 encrypt KAT" not in captured.out
