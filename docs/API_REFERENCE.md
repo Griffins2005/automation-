@@ -20,7 +20,8 @@ python -m crypto_validation --interactive
 ```
 
 The wizard asks for algorithm, test type, operation, file source, mode handling,
-DUT backend, report format, report directory, and confirmation before running.
+DUT backend, report format, report directory when needed, and confirmation
+before running.
 
 File source options:
 
@@ -68,9 +69,17 @@ Returns:
 Builds the command-line parser used by both `crypto-validate` and
 `python -m crypto_validation`.
 
-The parser is intentionally educational: `--help` includes the supported MVP
-matrix, complete Linux/macOS and Windows PowerShell examples, and the expected
-`.rsp` record structure.
+The parser exposes direct-run flags, discovery flags, and the explicit
+interactive mode flag.
+
+### `run_configs(configs: list[ValidationConfig]) -> int`
+
+Runs one or more validation configs and prints a global summary for multi-run
+batches.
+
+### `run_single_config(config: ValidationConfig) -> CliRunOutcome`
+
+Runs one config and returns the CLI-level outcome used for aggregate summaries.
 
 ## `crypto_validation.config`
 
@@ -140,6 +149,7 @@ Responsibilities:
 - parse key/value records
 - normalize hex values
 - separate AES inputs and expected outputs
+- enforce current AES mode requirements
 - preserve source metadata
 
 ### `build_parser(config) -> VectorParser`
@@ -210,19 +220,16 @@ Builds stable summary counts.
 
 Returns whether system-level errors occurred.
 
-### `print_console_report(config, source, results, json_report_path=None)`
+### `print_console_report(config, source, results, json_report_path=None, elapsed_seconds=None)`
 
-Prints a concise terminal summary.
+Prints a concise terminal summary, including timing metrics when provided.
 
-The implementation also accepts an optional elapsed time and prints throughput.
-
-### `write_json_report(config, source, results) -> Path`
+### `write_json_report(config, source, results, elapsed_seconds=None) -> Path`
 
 Writes a structured JSON report and returns its path.
 
-The implementation records elapsed time and throughput when provided, and uses
-collision-resistant filenames that include vector file stem plus high-resolution
-UTC timestamp.
+Records elapsed time and throughput when provided, and uses collision-resistant
+filenames that include vector file stem plus high-resolution UTC timestamp.
 
 ## `crypto_validation.vectors`
 

@@ -30,17 +30,6 @@ class AesPythonDut(Dut):
     Args:
         mode: AES mode name. Supported values are ``ECB``, ``CBC``, and
             ``CTR``.
-
-    Example:
-        Encrypt one AES-CBC block::
-
-            dut = AesPythonDut("CBC")
-            actual = dut.run({
-                "operation": "encrypt",
-                "key": "2b7e151628aed2a6abf7158809cf4f3c",
-                "iv": "000102030405060708090a0b0c0d0e0f",
-                "plaintext": "6bc1bee22e409f96e93d7e117393172a",
-            })
     """
 
     def __init__(self, mode: str):

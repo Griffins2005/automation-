@@ -1,28 +1,13 @@
 """Command-line entry point for the validation framework.
 
-The CLI is intentionally thin: it translates user arguments into a
-``ValidationConfig``, wires together the registered parser/DUT/executor, and
-delegates the actual validation loop to :class:`ValidationEngine`.
+This module owns user interaction and CLI orchestration. It converts command
+arguments or wizard answers into ``ValidationConfig`` objects, selects the
+registered parser/DUT/executor, runs validation, and maps outcomes to process
+exit codes.
 
-This separation keeps the core framework usable from tests, scripts, and a
-future web API without depending on terminal-specific behavior.
-
-When the user runs the tool without arguments, the CLI starts an interactive
-wizard. The wizard is optimized for the early framework stage: it asks only for
-the information needed by the current MVP and can run either one vector file or
-all supported vector files discovered under a folder.
-
-Example:
-    Run the sample AES-CBC encryption validation::
-
-        python3 -m crypto_validation \
-          --algorithm AES \
-          --mode CBC \
-          --operation encrypt \
-          --test-type KAT \
-          --vector-file sample_vectors/aes/aes_cbc_128.rsp \
-          --dut python \
-          --report-format json
+Running without arguments starts the interactive wizard. Folder wizard runs can
+auto-detect AES mode from filenames and operation from `[ENCRYPT]`/`[DECRYPT]`
+sections.
 """
 
 from __future__ import annotations
@@ -57,7 +42,6 @@ EXIT_VALIDATION_FAIL = 1
 EXIT_SYSTEM_ERROR = 2
 """Process exit code used for config, parser, DUT, or framework errors."""
 
-AUTO_MODE = "AUTO"
 SUPPORTED_AES_MODES = ("ECB", "CBC", "CTR")
 UNSUPPORTED_AES_MODE_TOKENS = ("CFB1", "CFB8", "CFB128", "CFB", "OFB")
 

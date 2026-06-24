@@ -70,7 +70,7 @@ The wizard asks step by step:
 5. AES mode or automatic mode detection from filenames
 6. DUT backend
 7. Report format
-8. Report directory
+8. Report directory for JSON reports
 9. Whether to run immediately
 
 If you enter an invalid option, the wizard reprints the step with a short retry
@@ -110,11 +110,14 @@ The terminal arguments tell the tool how to interpret and run that file:
 | --- | --- | --- |
 | `--algorithm` | Which algorithm family to validate | `AES` |
 | `--mode` | Which AES mode the file belongs to | `ECB`, `CBC`, `CTR` |
-| `--operation` | Which section to run | `encrypt`, `decrypt` |
+| `--operation` | Which section to run in direct CLI mode | `encrypt`, `decrypt` |
 | `--test-type` | Which validation method to use | `KAT` |
 | `--vector-file` | Path to the `.rsp` vector file | user path |
 | `--dut` | Which implementation to test | `python` |
 | `--report-format` | Report output type | `console`, `json` |
+
+The interactive wizard additionally supports operation auto-detection from
+`[ENCRYPT]` and `[DECRYPT]` sections.
 
 Discovery commands:
 

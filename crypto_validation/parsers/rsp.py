@@ -1,24 +1,9 @@
 """Parser for NIST CAVP-style `.rsp` vector files.
 
-The `.rsp` format is line-oriented and commonly uses records like::
-
-    [ENCRYPT]
-    COUNT = 0
-    KEY = ...
-    IV = ...
-    PLAINTEXT = ...
-    CIPHERTEXT = ...
-
-This parser turns those records into the framework's internal ``TestCase``
-contract. It also separates DUT inputs from golden expected outputs based on
-the selected operation:
-
-- AES encrypt: ``key``/``iv``/``plaintext`` -> expected ``ciphertext``
-- AES decrypt: ``key``/``iv``/``ciphertext`` -> expected ``plaintext``
-
-The parser validates basic hex syntax but does not enforce cryptographic
-semantic rules like AES key length. Those checks belong to the DUT layer, where
-the algorithm implementation can return a structured ``DUT_ERROR``.
+The parser converts line-oriented CAVP records into ``TestCase`` objects and
+separates DUT inputs from golden expected outputs. For AES KAT records it also
+enforces mode-level requirements before DUT execution, including key size,
+IV/counter size, ECB IV absence, and CBC/ECB block alignment.
 """
 
 from __future__ import annotations
@@ -52,8 +37,8 @@ AES_BLOCK_BYTES = 16
 class RspParser(VectorParser):
     """Parse NIST-style `.rsp` text into ``TestCase`` objects.
 
-    The parser is currently scoped to AES KAT records, but its structure allows
-    future field builders for SHA, HMAC, and other algorithms.
+    The parser is currently scoped to AES KAT records. Future algorithms should
+    add their own record builder while keeping the same ``TestCase`` contract.
     """
 
     def parse(
@@ -73,7 +58,8 @@ class RspParser(VectorParser):
             Parsed ``TestCase`` objects matching the requested operation.
 
         Raises:
-            ParseError: If a line is malformed or a required field is missing.
+            ParseError: If syntax, required fields, or AES mode requirements are
+                invalid.
 
         Notes:
             The implementation yields cases as it parses so it can evolve into a
@@ -188,7 +174,8 @@ class RspParser(VectorParser):
             AES test case with separated ``input`` and ``expected_output``.
 
         Raises:
-            ParseError: If required AES fields are missing.
+            ParseError: If required AES fields or mode-specific constraints are
+                invalid.
         """
 
         test_id = record.get("count")
