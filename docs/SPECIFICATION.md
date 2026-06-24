@@ -55,6 +55,11 @@ unsupported AES modes, such as `CFB1VarKey256.rsp`, are skipped with a message.
 If a user forces a mode, files whose filename indicates another supported mode
 are skipped to avoid incompatible validation runs.
 
+The wizard can also auto-detect operation from each file's `[ENCRYPT]` and
+`[DECRYPT]` sections. This is the default behavior for mixed folders and avoids
+reporting decrypt-only files as parse errors when the folder also contains
+encrypt-only files.
+
 Discovery commands:
 
 ```bash
@@ -206,12 +211,13 @@ The `.rsp` parser:
 - Preserves empty hex values.
 - Validates basic hex syntax.
 - Splits inputs and expected outputs according to operation.
+- Enforces current AES KAT field requirements before DUT execution.
 
 The parser does not:
 
 - Run cryptographic algorithms.
 - Decide pass/fail.
-- Enforce AES key length or block size. The DUT handles that.
+- Support non-AES algorithms yet.
 
 ### 5.1 Supported `.rsp` Examples
 

@@ -65,12 +65,12 @@ The wizard asks step by step:
 
 1. Algorithm
 2. Test type
-3. Operation
+3. Operation, including auto-detect from file
 4. Single vector file or folder of `.rsp` files
 5. AES mode or automatic mode detection from filenames
 6. DUT backend
 7. Report format
-8. Report directory
+8. Report directory for JSON reports
 9. Whether to run immediately
 
 If you enter an invalid option, the wizard reprints the step with a short retry
@@ -86,6 +86,10 @@ For file selection, the wizard supports:
 When folder mode is selected, the wizard scans for `.rsp` files recursively,
 auto-detects supported AES modes from filenames such as `CBCVarKey128.rsp`, and
 skips unsupported files such as `CFB1VarKey256.rsp`.
+
+By default, folder mode also auto-detects operation from each file's `[ENCRYPT]`
+or `[DECRYPT]` section. This allows mixed folders containing both encrypt and
+decrypt vector files to run without parse errors.
 
 If you force a mode in folder mode, files that appear to belong to another
 supported mode are skipped instead of being run with incompatible settings.
@@ -106,11 +110,14 @@ The terminal arguments tell the tool how to interpret and run that file:
 | --- | --- | --- |
 | `--algorithm` | Which algorithm family to validate | `AES` |
 | `--mode` | Which AES mode the file belongs to | `ECB`, `CBC`, `CTR` |
-| `--operation` | Which section to run | `encrypt`, `decrypt` |
+| `--operation` | Which section to run in direct CLI mode | `encrypt`, `decrypt` |
 | `--test-type` | Which validation method to use | `KAT` |
 | `--vector-file` | Path to the `.rsp` vector file | user path |
 | `--dut` | Which implementation to test | `python` |
 | `--report-format` | Report output type | `console`, `json` |
+
+The interactive wizard additionally supports operation auto-detection from
+`[ENCRYPT]` and `[DECRYPT]` sections.
 
 Discovery commands:
 

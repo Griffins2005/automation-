@@ -106,24 +106,6 @@ class TestCase:
     The validation engine only understands this schema; it does not know about
     raw `.rsp` syntax, AES field casing, or file section layout.
 
-    Example:
-        AES-CBC encryption test case::
-
-            TestCase(
-                test_id="0",
-                algorithm="AES",
-                mode="CBC",
-                operation="encrypt",
-                test_type="KAT",
-                input={
-                    "operation": "encrypt",
-                    "key": "...",
-                    "iv": "...",
-                    "plaintext": "...",
-                },
-                expected_output={"ciphertext": "..."},
-            )
-
     Attributes:
         test_id: Human-readable vector ID, usually NIST ``COUNT``.
         algorithm: Algorithm family for the test.
