@@ -8,6 +8,17 @@ exit codes.
 Running without arguments starts the interactive wizard. Folder wizard runs can
 auto-detect AES mode from filenames and operation from `[ENCRYPT]`/`[DECRYPT]`
 sections.
+
+Example:
+    Run the sample AES-CBC encryption validation::
+        python -m crypto_validation `
+            --algorithm AES `
+            --mode CBC `
+            --operation encrypt `
+            --test-type KAT `
+            --vector-file nisttestvectors/aes/aes_cbc_128.rsp `
+            --dut python `
+            --report-format json
 """
 
 from __future__ import annotations
