@@ -272,9 +272,14 @@ Validation report
 
 After the MVP is stable, extend to:
 
-- AES-ECB
-- AES-CBC
-- AES-CTR
+- Additional AES modes:
+  - ECB
+  - CBC
+  - CTR
+  - CFB1
+  - CFB8
+  - CFB128
+  - OFB
 - AES key sizes:
   - 128-bit
   - 192-bit
@@ -1176,7 +1181,7 @@ AES properties:
 ```text
 Block size: 128 bits
 Key sizes: 128, 192, 256 bits
-Common modes: ECB, CBC, CTR
+Supported KAT modes: ECB, CBC, CTR, CFB1, CFB8, CFB128, OFB
 ```
 
 AES input/output depends on mode and operation.
@@ -1229,6 +1234,21 @@ Important CTR questions:
 - Does the vector file define counter format?
 
 CTR mode is a common source of validation mismatch.
+
+#### AES-CFB and AES-OFB
+
+Supported feedback modes:
+
+```text
+CFB1, CFB8, CFB128, OFB
+```
+
+Important:
+
+- CFB1 vectors use bit strings for plaintext and ciphertext.
+- CFB8 and OFB require byte-aligned payloads.
+- CFB128 requires block-aligned payloads.
+- All feedback modes require a 128-bit IV.
 
 ### 17.2 Padding Rules
 

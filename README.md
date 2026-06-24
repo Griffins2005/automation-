@@ -25,7 +25,7 @@ Current MVP support:
 | Area | Supported |
 | --- | --- |
 | Algorithm | AES |
-| Modes | ECB, CBC, CTR |
+| Modes | ECB, CBC, CTR, CFB1, CFB8, CFB128, OFB |
 | Operations | encrypt, decrypt |
 | Test type | KAT |
 | Vector format | NIST-style `.rsp` |
@@ -35,9 +35,11 @@ Current MVP support:
 Strict AES validation is applied before DUT execution:
 
 - AES keys must be 128, 192, or 256 bits.
-- AES-CBC and AES-CTR require a 128-bit IV/counter.
+- AES-CBC, AES-CTR, AES-CFB1, AES-CFB8, AES-CFB128, and AES-OFB require a 128-bit IV/counter.
 - AES-ECB must not include IV.
-- AES-ECB and AES-CBC plaintext/ciphertext must be block-aligned.
+- AES-ECB, AES-CBC, and AES-CFB128 plaintext/ciphertext must be block-aligned.
+- AES-CFB8, AES-OFB, and AES-CTR plaintext/ciphertext must be byte-aligned.
+- AES-CFB1 plaintext/ciphertext values are bit strings.
 - AES-CTR uses a 128-bit big-endian initial counter block, matching the NIST
   SP 800-38A Appendix F.5 style sample in `sample_vectors/aes/aes_ctr_128.rsp`.
 
@@ -201,7 +203,7 @@ python3 -m crypto_validation \
 
 ## Currently Supported `.rsp` Shape
 
-AES-CBC or AES-CTR encryption records:
+IV/counter-based AES encryption records:
 
 ```text
 [ENCRYPT]
@@ -212,7 +214,7 @@ PLAINTEXT = <hex>
 CIPHERTEXT = <hex>
 ```
 
-AES-CBC or AES-CTR decryption records:
+IV/counter-based AES decryption records:
 
 ```text
 [DECRYPT]
@@ -225,16 +227,16 @@ PLAINTEXT = <hex>
 
 AES-ECB records are the same but omit `IV`.
 
+AES-CFB1 records use bit strings for `PLAINTEXT` and `CIPHERTEXT`.
+
 Important limitation:
 
 ```text
-AES-CFB, AES-OFB, bit-level CFB1 vectors, Monte Carlo Tests, ACVP JSON,
-SHA, HMAC, RSA, ECC, and DRBG are not supported by the current MVP yet.
+Monte Carlo Tests, ACVP JSON, SHA, HMAC, RSA, ECC, and DRBG are not supported by
+the current MVP yet.
 ```
 
-If your vector file is named like `CFB1VarKey256.rsp`, it is an AES-CFB1
-bit-level vector. The current MVP will explain the supported format, but it
-does not run CFB1 validation yet.
+AES-CFB1 files such as `CFB1VarKey256.rsp` are supported for KAT vectors.
 
 ## Run Tests
 
@@ -261,8 +263,8 @@ python3 -m crypto_validation --algorithm AES --mode CTR --operation encrypt \
   --vector-file sample_vectors/aes/failure_injection/ctr_encrypt_bad_counter.rsp
 ```
 
-They include bad CBC, ECB, and CTR vectors with modified ciphertext, plaintext,
-key, or counter values.
+They include bad CBC, ECB, CTR, CFB1, CFB8, CFB128, and OFB vectors with
+modified ciphertext, plaintext, key, or counter values.
 
 ## CLI Exit Codes
 

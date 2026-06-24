@@ -1,0 +1,10 @@
+# Intentionally bad AES-OFB encrypt vector.
+# Injection: expected CIPHERTEXT first hex nibble changed from 3 to 4.
+
+[ENCRYPT]
+
+COUNT = 0
+KEY = 2b7e151628aed2a6abf7158809cf4f3c
+IV = 000102030405060708090a0b0c0d0e0f
+PLAINTEXT = 6bc1bee22e409f96e93d7e117393172a
+CIPHERTEXT = 4b3fd92eb72dad20333449f8e83cfb4a

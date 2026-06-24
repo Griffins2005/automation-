@@ -7,7 +7,8 @@ adapters should implement.
 Important crypto assumptions:
 
 - Inputs and outputs are hex strings.
-- CBC/ECB payloads must already be block-aligned.
+- CFB1 plaintext/ciphertext values are bit strings.
+- CBC/ECB/CFB128 payloads must already be block-aligned.
 - No automatic padding is applied. NIST algorithm vectors generally operate on
   exact algorithm-level inputs, not application-level padded messages.
 - CTR mode treats the provided ``iv`` field as a full 128-bit big-endian initial
@@ -25,11 +26,11 @@ from crypto_validation.exceptions import DutError
 
 
 class AesPythonDut(Dut):
-    """AES DUT supporting ECB, CBC, and CTR modes.
+    """AES DUT supporting the MVP AES modes.
 
     Args:
-        mode: AES mode name. Supported values are ``ECB``, ``CBC``, and
-            ``CTR``.
+        mode: AES mode name. Supported values are ``ECB``, ``CBC``, ``CTR``,
+            ``CFB1``, ``CFB8``, ``CFB128``, and ``OFB``.
     """
 
     def __init__(self, mode: str):
@@ -64,14 +65,23 @@ class AesPythonDut(Dut):
             if operation == "encrypt":
                 input_field = "plaintext"
                 output_field = "ciphertext"
-                payload = bytes.fromhex(input_data[input_field])
             elif operation == "decrypt":
                 input_field = "ciphertext"
                 output_field = "plaintext"
-                payload = bytes.fromhex(input_data[input_field])
             else:
                 raise DutError(f"Unsupported AES operation: {operation}")
 
+            if self.mode == "CFB1":
+                return {
+                    output_field: self._run_cfb1(
+                        key=key,
+                        iv=bytes.fromhex(input_data["iv"]),
+                        payload_bits=input_data[input_field],
+                        operation=operation,
+                    )
+                }
+
+            payload = bytes.fromhex(input_data[input_field])
             cipher = self._build_cipher(key, input_data)
             if operation == "encrypt":
                 output = cipher.encrypt(payload)
@@ -110,6 +120,18 @@ class AesPythonDut(Dut):
             iv = bytes.fromhex(input_data["iv"])
             return AES.new(key, AES.MODE_CBC, iv)
 
+        if self.mode == "CFB8":
+            iv = bytes.fromhex(input_data["iv"])
+            return AES.new(key, AES.MODE_CFB, iv=iv, segment_size=8)
+
+        if self.mode == "CFB128":
+            iv = bytes.fromhex(input_data["iv"])
+            return AES.new(key, AES.MODE_CFB, iv=iv, segment_size=128)
+
+        if self.mode == "OFB":
+            iv = bytes.fromhex(input_data["iv"])
+            return AES.new(key, AES.MODE_OFB, iv=iv)
+
         if self.mode == "CTR":
             iv = bytes.fromhex(input_data["iv"])
             # MVP convention: treat IV as the full AES block-sized initial
@@ -119,3 +141,32 @@ class AesPythonDut(Dut):
             return AES.new(key, AES.MODE_CTR, nonce=b"", initial_value=initial_value)
 
         raise DutError(f"Unsupported AES mode: {self.mode}")
+
+    @staticmethod
+    def _run_cfb1(key: bytes, iv: bytes, payload_bits: str, operation: str) -> str:
+        """Run AES-CFB1 one bit at a time.
+
+        CAVP CFB1 vectors represent PLAINTEXT and CIPHERTEXT as bit strings,
+        not hexadecimal bytes. The shift register is updated with ciphertext
+        bits for both encryption and decryption, per SP 800-38A CFB behavior.
+        """
+
+        cipher = AES.new(key, AES.MODE_ECB)
+        register = int.from_bytes(iv, byteorder="big")
+        output_bits: list[str] = []
+
+        for bit in payload_bits:
+            keystream_block = cipher.encrypt(register.to_bytes(16, byteorder="big"))
+            keystream_bit = (keystream_block[0] >> 7) & 1
+            input_bit = int(bit)
+            output_bit = keystream_bit ^ input_bit
+
+            if operation == "encrypt":
+                ciphertext_bit = output_bit
+            else:
+                ciphertext_bit = input_bit
+
+            output_bits.append(str(output_bit))
+            register = ((register << 1) & ((1 << 128) - 1)) | ciphertext_bit
+
+        return "".join(output_bits)
