@@ -918,7 +918,7 @@ def _prompt_yes_no(prompt: str, input_func, default: bool) -> bool:
 
 
 def _infer_aes_mode_from_path(path: Path) -> str | None:
-    """Infer ECB/CBC/CTR from a vector filename."""
+    """Infer a supported AES mode from a vector filename."""
 
     name = path.name.upper()
     for mode in AES_MODE_DETECTION_ORDER:
