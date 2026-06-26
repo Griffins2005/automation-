@@ -14,7 +14,7 @@ Current MVP:
 - Modes: ECB, CBC, CTR, CFB1, CFB8, CFB128, OFB
 - Operations: encrypt, decrypt
 - Test type: KAT
-- Vector format: `.rsp`
+- Vector formats: `.rsp`, JSON
 - DUT backend: Python/PyCryptodome
 - Reports: console and JSON
 
@@ -26,7 +26,7 @@ CLI arguments
   -> config validation
   -> vector provenance/checksum
   -> parser registry
-  -> .rsp parser
+  -> selected vector parser
   -> TestCase objects
   -> DUT registry
   -> KAT executor
@@ -47,7 +47,7 @@ If no arguments are provided, the CLI starts an interactive wizard. The wizard
 collects the same run configuration step by step and can run either:
 
 1. one specific vector file, or
-2. every supported `.rsp` file found under a selected folder.
+2. every supported `.rsp` or `.json` file found under a selected folder.
 
 For folder runs, the wizard scans recursively. It can auto-detect supported AES
 modes from filenames containing `ECB`, `CBC`, or `CTR`. Files that look like
@@ -55,10 +55,10 @@ unsupported AES modes, such as `CFB1VarKey256.rsp`, are skipped with a message.
 If a user forces a mode, files whose filename indicates another supported mode
 are skipped to avoid incompatible validation runs.
 
-The wizard can also auto-detect operation from each file's `[ENCRYPT]` and
-`[DECRYPT]` sections. This is the default behavior for mixed folders and avoids
-reporting decrypt-only files as parse errors when the folder also contains
-encrypt-only files.
+The wizard can also auto-detect operation from each file's `[ENCRYPT]` /
+`[DECRYPT]` sections or JSON `direction` / `operation` fields. This is the
+default behavior for mixed folders and avoids reporting decrypt-only files as
+parse errors when the folder also contains encrypt-only files.
 
 Discovery commands:
 
@@ -83,7 +83,7 @@ Required fields:
 | `operation` | Operation under test | `encrypt` |
 | `test_type` | Validation category | `KAT` |
 | `vector_file` | Source vector path | `sample_vectors/aes/aes_cbc_128.rsp` |
-| `vector_format` | Parser format | `rsp` |
+| `vector_format` | Parser format | `rsp` or `json` |
 | `dut` | DUT backend | `python` |
 | `report_format` | File report type | `json` |
 | `report_dir` | Report output directory | `reports` |
@@ -128,7 +128,7 @@ The parser output and engine input.
   },
   "metadata": {
     "source_file": "...",
-    "source_format": "rsp",
+    "source_format": "rsp or json",
     "source_checksum_sha256": "..."
   }
 }
@@ -222,6 +222,12 @@ All AES modes require keys of 128, 192, or 256 bits.
 
 ## 5. Parser Rules
 
+Both supported parsers:
+
+- Return the same internal `TestCase` contract.
+- Split inputs and expected outputs according to operation.
+- Enforce current AES KAT field requirements before DUT execution.
+
 The `.rsp` parser:
 
 - Supports `[ENCRYPT]` and `[DECRYPT]` sections.
@@ -231,10 +237,15 @@ The `.rsp` parser:
 - Removes spaces inside hex fields.
 - Preserves empty hex values.
 - Validates basic hex syntax.
-- Splits inputs and expected outputs according to operation.
-- Enforces current AES KAT field requirements before DUT execution.
 
-The parser does not:
+The JSON parser:
+
+- Supports a top-level `tests` list for framework-native JSON.
+- Supports ACVP-like `testGroups` / `tests` structures.
+- Accepts common AES aliases such as `tcId`, `pt`, `ct`, and `direction`.
+- Rejects JSON files whose declared AES mode conflicts with selected config.
+
+The parsers do not:
 
 - Run cryptographic algorithms.
 - Decide pass/fail.
@@ -268,13 +279,19 @@ AES-ECB records omit `IV`.
 
 AES-CFB1 records use bit strings for `PLAINTEXT` and `CIPHERTEXT`.
 
-### 5.2 Explicitly Unsupported in MVP
+### 5.2 Supported JSON Shapes
+
+Framework-native JSON uses a top-level `tests` list. ACVP-like JSON uses
+`testGroups` containing `tests`. In both cases, parsed records are normalized
+into the same internal `TestCase` format as `.rsp` vectors.
+
+### 5.3 Explicitly Unsupported in MVP
 
 The MVP does not yet support:
 
 - Monte Carlo Tests
 - SHA/HMAC/RSA/ECC/DRBG
-- ACVP JSON
+- Full ACVP protocol workflows
 
 AES-CFB1, AES-CFB8, AES-CFB128, and AES-OFB are supported for KAT vectors.
 

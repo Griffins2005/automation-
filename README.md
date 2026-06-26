@@ -3,8 +3,8 @@
 This repository contains a terminal-first Python MVP for validating cryptographic
 algorithm outputs against NIST-style test vectors.
 
-The first implemented flow supports AES Known Answer Tests from `.rsp` files
-using a Python DUT backed by PyCryptodome.
+The implemented flow supports AES Known Answer Tests from `.rsp` and JSON
+vector files using a Python DUT backed by PyCryptodome.
 
 ## What This Project Does
 
@@ -28,7 +28,7 @@ Current MVP support:
 | Modes | ECB, CBC, CTR, CFB1, CFB8, CFB128, OFB |
 | Operations | encrypt, decrypt |
 | Test type | KAT |
-| Vector format | NIST-style `.rsp` |
+| Vector formats | NIST-style `.rsp`, framework-native JSON, ACVP-like JSON |
 | DUT backend | Python/PyCryptodome |
 | Reports | console, JSON |
 
@@ -68,7 +68,7 @@ The wizard asks step by step:
 1. Algorithm
 2. Test type
 3. Operation, including auto-detect from file
-4. Single vector file or folder of `.rsp` files
+4. Single vector file or folder of `.rsp` / `.json` files
 5. AES mode or automatic mode detection from filenames
 6. DUT backend
 7. Report format
@@ -82,16 +82,17 @@ For file selection, the wizard supports:
 
 ```text
 1. A specific vector file
-2. All supported .rsp vector files inside a folder
+2. All supported `.rsp` / `.json` vector files inside a folder
 ```
 
-When folder mode is selected, the wizard scans for `.rsp` files recursively,
-auto-detects supported AES modes from filenames such as `CBCVarKey128.rsp`, and
-skips unsupported files such as `CFB1VarKey256.rsp`.
+When folder mode is selected, the wizard scans for `.rsp` and `.json` files
+recursively, auto-detects supported AES modes from filenames such as
+`CBCVarKey128.rsp`, and skips files whose mode cannot be inferred.
 
 By default, folder mode also auto-detects operation from each file's `[ENCRYPT]`
-or `[DECRYPT]` section. This allows mixed folders containing both encrypt and
-decrypt vector files to run without parse errors.
+or `[DECRYPT]` section, or from JSON `direction` / `operation` fields. This
+allows mixed folders containing both encrypt and decrypt vector files to run
+without parse errors.
 
 If you force a mode in folder mode, files that appear to belong to another
 supported mode are skipped instead of being run with incompatible settings.
@@ -111,10 +112,10 @@ The terminal arguments tell the tool how to interpret and run that file:
 | CLI argument | What it means | Current values |
 | --- | --- | --- |
 | `--algorithm` | Which algorithm family to validate | `AES` |
-| `--mode` | Which AES mode the file belongs to | `ECB`, `CBC`, `CTR` |
+| `--mode` | Which AES mode the file belongs to | `ECB`, `CBC`, `CTR`, `CFB1`, `CFB8`, `CFB128`, `OFB` |
 | `--operation` | Which section to run in direct CLI mode | `encrypt`, `decrypt` |
 | `--test-type` | Which validation method to use | `KAT` |
-| `--vector-file` | Path to the `.rsp` vector file | user path |
+| `--vector-file` | Path to the vector file | user path |
 | `--dut` | Which implementation to test | `python` |
 | `--report-format` | Report output type | `console`, `json` |
 
@@ -201,7 +202,21 @@ python3 -m crypto_validation \
   --report-dir reports
 ```
 
-## Currently Supported `.rsp` Shape
+Run the sample AES-CBC JSON validation:
+
+```bash
+python3 -m crypto_validation \
+  --algorithm AES \
+  --mode CBC \
+  --operation encrypt \
+  --test-type KAT \
+  --vector-file sample_vectors/aes/aes_cbc_128.json \
+  --dut python \
+  --report-format json \
+  --report-dir reports
+```
+
+## Currently Supported Vector Shapes
 
 IV/counter-based AES encryption records:
 
@@ -229,11 +244,17 @@ AES-ECB records are the same but omit `IV`.
 
 AES-CFB1 records use bit strings for `PLAINTEXT` and `CIPHERTEXT`.
 
+JSON files may use either:
+
+- a top-level `tests` list with `input` and `expected_output`, or
+- an ACVP-like `testGroups` / `tests` structure with aliases such as `pt`,
+  `ct`, `tcId`, and `direction`.
+
 Important limitation:
 
 ```text
-Monte Carlo Tests, ACVP JSON, SHA, HMAC, RSA, ECC, and DRBG are not supported by
-the current MVP yet.
+Monte Carlo Tests, full ACVP protocol workflows, SHA, HMAC, RSA, ECC, and DRBG
+are not supported by the current MVP yet.
 ```
 
 AES-CFB1 files such as `CFB1VarKey256.rsp` are supported for KAT vectors.
@@ -306,7 +327,7 @@ crypto_validation/
   reporting/              # console and JSON reports
 
 sample_vectors/
-  aes/                    # sample AES .rsp vectors
+  aes/                    # sample AES .rsp and JSON vectors
 
 tests/                    # pytest coverage
 docs/                     # developer-facing docs
@@ -326,7 +347,7 @@ Validation engine coordinates.
 ```
 
 This keeps the MVP understandable and makes it easier to add SHA, HMAC, MCT,
-ACVP JSON, RTL DUTs, and new report formats later.
+full ACVP workflows, RTL DUTs, and new report formats later.
 
 ## Developer Documentation
 

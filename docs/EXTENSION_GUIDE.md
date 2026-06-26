@@ -150,14 +150,15 @@ Update `build_dut(config)`.
 
 ## 5. Add a New Vector Format
 
-Example: ACVP JSON.
+The framework currently supports `.rsp` and JSON. Use this process for another
+format, such as YAML or a proprietary internal format.
 
 ### Step 1: Create Parser
 
-Create:
+Create a parser module:
 
 ```text
-crypto_validation/parsers/acvp_json.py
+crypto_validation/parsers/<format_name>.py
 ```
 
 Subclass `VectorParser`.
@@ -176,9 +177,9 @@ crypto_validation/parsers/registry.py
 
 ### Step 4: Add Tests
 
-Include:
+Include tests for:
 
-- valid JSON vector
+- valid vectors
 - missing required fields
 - grouped vectors
 - unsupported test groups

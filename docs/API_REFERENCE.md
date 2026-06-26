@@ -25,15 +25,15 @@ before running.
 
 File source options:
 
-1. a single `.rsp` vector file
-2. a folder containing `.rsp` vector files
+1. a single `.rsp` or `.json` vector file
+2. a folder containing `.rsp` / `.json` vector files
 
 Folder mode scans recursively, runs supported AES mode files, and skips files
 whose mode cannot be inferred.
 
 The operation step supports auto-detection. In folder mode, auto-detection reads
-each file's `[ENCRYPT]` and `[DECRYPT]` sections and creates the matching run
-configuration for that file.
+each file's `.rsp` sections or JSON `direction` / `operation` fields and creates
+the matching run configuration for that file.
 
 If a user forces a mode, files whose filename suggests a different supported
 mode are skipped. This prevents accidental CBC validation against CTR vectors,
@@ -52,7 +52,7 @@ python -m crypto_validation --show-format
 Use `--list-supported` to print the currently supported algorithms, modes, DUTs,
 formats, and reports.
 
-Use `--show-format` to print the supported `.rsp` vector file shape.
+Use `--show-format` to print the supported vector file shapes.
 
 ### `main(argv: list[str] | None = None) -> int`
 
@@ -151,6 +151,18 @@ Responsibilities:
 - separate AES inputs and expected outputs
 - enforce current AES mode requirements
 - preserve source metadata
+
+### `JsonParser`
+
+Parses framework-native and ACVP-like JSON vectors.
+
+Responsibilities:
+
+- read top-level `tests` or ACVP-like `testGroups`
+- normalize aliases such as `tcId`, `pt`, `ct`, and `direction`
+- separate AES inputs and expected outputs
+- enforce current AES mode requirements through shared AES parser helpers
+- preserve source and JSON group/test metadata
 
 ### `build_parser(config) -> VectorParser`
 

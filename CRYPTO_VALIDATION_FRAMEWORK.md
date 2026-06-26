@@ -28,7 +28,7 @@ Compare Actual Outputs Against Golden Expected Outputs
 Generate Validation Reports
 ```
 
-The first recommended implementation should be a terminal-first Python backend focused on AES Known Answer Tests using NIST `.rsp` vectors and a Python reference DUT. After proving the full end-to-end pipeline, the framework can be extended to SHA-2, SHA-3, HMAC, RSA, ECC, DRBG, Monte Carlo Tests, ACVP JSON vectors, RTL simulators, C models, and hardware accelerators.
+The first implementation is a terminal-first Python backend focused on AES Known Answer Tests using NIST `.rsp` and JSON-style vectors with a Python reference DUT. After proving the full end-to-end pipeline, the framework can be extended to SHA-2, SHA-3, HMAC, RSA, ECC, DRBG, Monte Carlo Tests, full ACVP workflows, RTL simulators, C models, and hardware accelerators.
 
 The key design principle is that this should not be a one-off validation script. It should be a modular and extensible validation framework.
 
@@ -245,7 +245,7 @@ Algorithm: AES
 Modes: CBC first, then ECB and CTR
 Operation: Encrypt first, then decrypt
 Test Type: KAT
-Vector Format: NIST .rsp
+Vector Formats: NIST .rsp and JSON
 DUT: Python reference implementation
 Interface: Terminal CLI
 Reports: Console and JSON
@@ -255,7 +255,7 @@ Testing: pytest unit tests
 The MVP should demonstrate a full end-to-end pipeline:
 
 ```text
-NIST AES .rsp vector file
+NIST AES vector file
     ->
 Parser
     ->
@@ -292,7 +292,7 @@ After the MVP is stable, extend to:
 - HMAC-SHA512
 - Monte Carlo Tests
 - Multi-block tests
-- ACVP JSON vector parsing
+- Full ACVP protocol workflow support
 - CSV report output
 - HTML report output
 - External DUT command adapter
@@ -547,7 +547,7 @@ crypto_validation/
 |   |-- __init__.py
 |   |-- base.py
 |   |-- rsp_parser.py
-|   |-- acvp_json_parser.py
+|   |-- json.py
 |   |-- registry.py
 |
 |-- models/
@@ -1406,7 +1406,7 @@ DUT_REGISTRY = {
 ```python
 PARSER_REGISTRY = {
     "rsp": RspParser,
-    "json": AcvpJsonParser,
+    "json": JsonParser,
 }
 ```
 
@@ -1994,7 +1994,7 @@ Implement:
 Deliverable:
 
 ```text
-AES-CBC KAT validation from NIST .rsp file.
+AES-CBC KAT validation from NIST `.rsp` or JSON vector file.
 ```
 
 ### Phase 4: AES Expansion
@@ -2101,7 +2101,7 @@ The full project is successful if:
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| NIST vector formats vary | Parser complexity | Start with AES `.rsp`; build parser registry |
+| NIST vector formats vary | Parser complexity | Support `.rsp` and JSON through parser registry |
 | AES-CTR counter interpretation differs | Incorrect outputs | Document counter format and validate with known vectors |
 | MCT logic is algorithm-specific | Incorrect MCT results | Use separate executor classes |
 | Empty inputs mishandled | SHA/HMAC failures | Explicit parser tests for empty values |
@@ -2132,7 +2132,7 @@ These questions should be clarified before or during implementation:
 
 4. Which vector format should be supported first?
    - `.rsp`
-   - ACVP JSON
+   - full ACVP workflow support
    - internal CSV/TXT
 
 5. Which DUT should be integrated first?
@@ -2232,7 +2232,7 @@ AI can assist debugging, but validation decisions must remain deterministic.
 
 Future integration could:
 
-- Consume ACVP JSON.
+- Consume and emit ACVP protocol payloads.
 - Produce ACVP-compatible responses.
 - Support automated certification workflows.
 
@@ -2325,7 +2325,7 @@ Load vectors -> parse inputs/expected outputs -> run DUT -> compare -> report
 ### What is the first target?
 
 ```text
-AES-CBC KAT validation using NIST .rsp files and Python DUT.
+AES-CBC KAT validation using NIST `.rsp` / JSON files and Python DUT.
 ```
 
 ### Why terminal-first?
