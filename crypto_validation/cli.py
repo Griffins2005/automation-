@@ -6,19 +6,8 @@ registered parser/DUT/executor, runs validation, and maps outcomes to process
 exit codes.
 
 Running without arguments starts the interactive wizard. Folder wizard runs can
-auto-detect AES mode from filenames and operation from `[ENCRYPT]`/`[DECRYPT]`
-sections.
-
-Example:
-    Run the sample AES-CBC encryption validation::
-        python -m crypto_validation `
-            --algorithm AES `
-            --mode CBC `
-            --operation encrypt `
-            --test-type KAT `
-            --vector-file nisttestvectors/aes/aes_cbc_128.rsp `
-            --dut python `
-            --report-format json
+auto-detect AES mode from filenames and operation from `.rsp` sections or JSON
+direction/operation fields.
 """
 
 from __future__ import annotations
@@ -56,6 +45,7 @@ EXIT_SYSTEM_ERROR = 2
 SUPPORTED_AES_MODES = ("ECB", "CBC", "CTR", "CFB1", "CFB8", "CFB128", "OFB")
 AES_MODE_DETECTION_ORDER = ("CFB128", "CFB8", "CFB1", "ECB", "CBC", "CTR", "OFB")
 UNSUPPORTED_AES_MODE_TOKENS: tuple[str, ...] = ()
+DISCOVERABLE_VECTOR_SUFFIXES = {".rsp", ".json"}
 
 
 @dataclass(frozen=True)
@@ -75,7 +65,7 @@ Algorithm:      AES
 Modes:          ECB, CBC, CTR, CFB1, CFB8, CFB128, OFB
 Operations:     encrypt, decrypt
 Test type:      KAT
-Vector format:  NIST-style .rsp
+Vector formats: NIST-style .rsp, JSON
 DUT backend:    python
 Reports:        console, json
 
@@ -91,7 +81,7 @@ The terminal arguments describe HOW to run validation:
   --dut           Which DUT backend to run. Currently python.
 
 The user does NOT type the vector contents into the terminal. The vector
-contents live inside the .rsp file passed with --vector-file.
+contents live inside the vector file passed with --vector-file.
 
 Quick discovery commands
 ------------------------
@@ -99,12 +89,12 @@ Show supported algorithms, modes, formats, and examples:
 
   python -m crypto_validation --list-supported
 
-Show the expected .rsp vector file structure:
+Show the expected vector file structures:
 
   python -m crypto_validation --show-format
 
-Currently supported .rsp record shape
--------------------------------------
+Currently supported vector shapes
+---------------------------------
 AES modes with IV/counter encrypt:
 
   [ENCRYPT]
@@ -125,6 +115,8 @@ AES modes with IV/counter decrypt:
 
 AES-ECB is the same but without IV. AES-CFB1 uses bit strings for
 PLAINTEXT/CIPHERTEXT.
+
+JSON files may use either a top-level tests list or ACVP-like testGroups/tests.
 
 Complete examples
 -----------------
@@ -154,7 +146,7 @@ Current MVP support:
   Algorithm: AES
   Modes:     ECB, CBC, CTR, CFB1, CFB8, CFB128, OFB
   Test type: KAT
-  Format:    .rsp
+  Formats:   .rsp, .json
 
 Note: AES-CFB1 vectors use bit strings instead of byte-oriented hex payloads.
 """
@@ -183,7 +175,8 @@ Supported MVP configuration
   KAT - Known Answer Test.
 
 --vector-format:
-  rsp - NIST CAVP-style response file.
+  rsp  - NIST CAVP-style response file.
+  json - Framework-native or ACVP-like JSON vector file.
 
 --dut:
   python - PyCryptodome-backed reference DUT.
@@ -200,8 +193,8 @@ the test values such as KEY, IV, PLAINTEXT, and CIPHERTEXT.
 
 
 VECTOR_FORMAT_DETAILS = """
-Supported .rsp vector format
-----------------------------
+Supported vector formats
+------------------------
 Records are key/value pairs. A blank line or a new COUNT starts a new test case.
 Hex values may be uppercase or lowercase. Spaces inside hex values are removed.
 
@@ -231,9 +224,19 @@ AES-CFB1 encrypt/decrypt:
 
   Same fields as IV-based modes, but PLAINTEXT/CIPHERTEXT are bit strings.
 
+Framework-native JSON:
+
+  Top-level object with a tests list. Each test may contain input and
+  expected_output objects.
+
+ACVP-like JSON:
+
+  Top-level object with testGroups. Each group contains a tests list and may
+  provide direction at the group or test level.
+
 Currently not supported
 -----------------------
-The MVP does not yet support Monte Carlo Tests, SHA/HMAC/RSA/ECC/DRBG, or ACVP JSON.
+The MVP does not yet support Monte Carlo Tests, SHA/HMAC/RSA/ECC/DRBG, or full ACVP protocol workflows.
 """
 
 
@@ -251,9 +254,9 @@ class CryptoValidateArgumentParser(argparse.ArgumentParser):
         self.exit(
             EXIT_SYSTEM_ERROR,
             f"{self.prog}: error: {message}\n\n"
-            "Run with --help to see supported values, examples, and the expected .rsp format.\n"
+            "Run with --help to see supported values, examples, and vector formats.\n"
             "Run --list-supported for the supported configuration matrix.\n"
-            "Run --show-format for the expected .rsp file structure.\n",
+            "Run --show-format for the expected vector file structures.\n",
         )
 
 
@@ -287,7 +290,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--show-format",
         action="store_true",
-        help="Print the currently supported .rsp vector file structure.",
+        help="Print the currently supported vector file structures.",
     )
     parser.add_argument(
         "--interactive",
@@ -322,14 +325,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--vector-file",
-        help="Path to the .rsp file containing vector records such as KEY, IV, PLAINTEXT, CIPHERTEXT.",
+        help="Path to a .rsp or .json vector file.",
     )
     parser.add_argument(
         "--vector-format",
         default=None,
         type=str.lower,
-        choices=["rsp"],
-        help="Vector format. Defaults to the vector file extension. Currently supported: rsp.",
+        choices=["rsp", "json"],
+        help="Vector format. Defaults to the vector file extension. Supported: rsp, json.",
     )
     parser.add_argument(
         "--dut",
@@ -407,10 +410,10 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         print(
-            "The terminal must provide the run configuration, while the .rsp file provides KEY/IV/PLAINTEXT/CIPHERTEXT.",
+            "The terminal must provide the run configuration; the vector file provides KEY/IV/PLAINTEXT/CIPHERTEXT.",
             file=sys.stderr,
         )
-        print("Run --help for complete examples or --show-format for the vector file structure.", file=sys.stderr)
+        print("Run --help for examples or --show-format for supported vector structures.", file=sys.stderr)
         return EXIT_SYSTEM_ERROR
 
     vector_format = args.vector_format or Path(args.vector_file).suffix.lstrip(".")
@@ -623,7 +626,7 @@ def run_interactive_wizard(input_func=None) -> int:
 
         source_kind = _prompt_select(
             "Where are the vector files?",
-            ["single file", "folder of .rsp files"],
+            ["single file", "folder of vector files"],
             default="single file",
             input_func=input_func,
         )
@@ -717,8 +720,8 @@ def _interactive_single_file_configs(
         if not path.exists() or not path.is_file():
             print("File not found. Try again.")
             continue
-        if path.suffix.lower() != ".rsp":
-            print("Use a .rsp file.")
+        if path.suffix.lower() not in DISCOVERABLE_VECTOR_SUFFIXES:
+            print("Use a .rsp or .json file.")
             continue
         unsupported_reason = _unsupported_mode_reason(path)
         if unsupported_reason:
@@ -750,6 +753,7 @@ def _interactive_single_file_configs(
             operation=resolved_operation,
             test_type=test_type,
             vector_file=str(path),
+            vector_format=path.suffix.lower().lstrip("."),
         )
         for resolved_operation in operations
     ]
@@ -779,9 +783,9 @@ def _interactive_folder_configs(
     if mode_choice.startswith("force "):
         forced_mode = mode_choice.removeprefix("force ").upper()
 
-    files = sorted(folder.rglob("*.rsp"))
+    files = sorted(path for path in folder.rglob("*") if path.suffix.lower() in DISCOVERABLE_VECTOR_SUFFIXES)
     if not files:
-        print(f"No .rsp files found under: {folder}", file=sys.stderr)
+        print(f"No .rsp or .json files found under: {folder}", file=sys.stderr)
         return []
 
     configs: list[ValidationConfig] = []
@@ -815,10 +819,11 @@ def _interactive_folder_configs(
                     operation=resolved_operation,
                     test_type=test_type,
                     vector_file=str(file_path),
+                    vector_format=file_path.suffix.lower().lstrip("."),
                 )
             )
 
-    print(f"Discovered {len(files)} .rsp file(s).")
+    print(f"Discovered {len(files)} vector file(s).")
     print(f"Runnable with current MVP: {len(configs)}")
     if skipped:
         print(f"Skipped unsupported/unknown files: {len(skipped)}")
@@ -836,6 +841,7 @@ def _build_config_shell(
     operation: str,
     test_type: str,
     vector_file: str,
+    vector_format: str = "rsp",
 ) -> ValidationConfig:
     """Build a partial config; wizard fills DUT/report settings later."""
 
@@ -845,7 +851,7 @@ def _build_config_shell(
         operation=operation,
         test_type=test_type,
         vector_file=vector_file,
-        vector_format="rsp",
+        vector_format=vector_format,
         dut="python",
         report_format="json",
         report_dir="reports",
@@ -918,7 +924,7 @@ def _prompt_yes_no(prompt: str, input_func, default: bool) -> bool:
 
 
 def _infer_aes_mode_from_path(path: Path) -> str | None:
-    """Infer ECB/CBC/CTR from a vector filename."""
+    """Infer a supported AES mode from a vector filename."""
 
     name = path.name.upper()
     for mode in AES_MODE_DETECTION_ORDER:
@@ -941,7 +947,7 @@ def _resolve_operations_for_file(path: Path, operation_choice: str) -> list[str]
 
 
 def _detect_operations_in_file(path: Path) -> list[str]:
-    """Return ENCRYPT/DECRYPT sections present in a vector file."""
+    """Return operations present in a vector file."""
 
     try:
         text = path.read_text(encoding="utf-8", errors="ignore").upper()
@@ -953,6 +959,16 @@ def _detect_operations_in_file(path: Path) -> list[str]:
         operations.append("encrypt")
     if "[DECRYPT]" in text:
         operations.append("decrypt")
+    if not operations and '"DIRECTION"' in text:
+        if '"ENCRYPT"' in text:
+            operations.append("encrypt")
+        if '"DECRYPT"' in text:
+            operations.append("decrypt")
+    if not operations and '"OPERATION"' in text:
+        if '"ENCRYPT"' in text:
+            operations.append("encrypt")
+        if '"DECRYPT"' in text:
+            operations.append("decrypt")
     return operations
 
 

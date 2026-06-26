@@ -84,7 +84,7 @@ def test_cli_show_format_prints_rsp_structure(capsys):
 
     captured = capsys.readouterr()
     assert exit_code == EXIT_OK
-    assert "Supported .rsp vector format" in captured.out
+    assert "Supported vector formats" in captured.out
     assert "COUNT = 0" in captured.out
     assert "KEY =" in captured.out
     assert "CFB1" in captured.out
@@ -303,6 +303,60 @@ def test_cli_runs_aes_ctr_encrypt_end_to_end(tmp_path):
     assert payload["summary"]["passed"] == 2
 
 
+def test_cli_runs_native_json_vector(tmp_path):
+    exit_code = main(
+        [
+            "--algorithm",
+            "AES",
+            "--mode",
+            "CBC",
+            "--operation",
+            "encrypt",
+            "--test-type",
+            "KAT",
+            "--vector-file",
+            "sample_vectors/aes/aes_cbc_128.json",
+            "--dut",
+            "python",
+            "--report-format",
+            "json",
+            "--report-dir",
+            str(tmp_path),
+        ]
+    )
+
+    assert exit_code == EXIT_OK
+    payload = json.loads(next(tmp_path.glob("*.json")).read_text(encoding="utf-8"))
+    assert payload["summary"]["passed"] == 1
+
+
+def test_cli_runs_acvp_like_json_vector(tmp_path):
+    exit_code = main(
+        [
+            "--algorithm",
+            "AES",
+            "--mode",
+            "CTR",
+            "--operation",
+            "encrypt",
+            "--test-type",
+            "KAT",
+            "--vector-file",
+            "sample_vectors/aes/aes_ctr_128_acvp.json",
+            "--dut",
+            "python",
+            "--report-format",
+            "json",
+            "--report-dir",
+            str(tmp_path),
+        ]
+    )
+
+    assert exit_code == EXIT_OK
+    payload = json.loads(next(tmp_path.glob("*.json")).read_text(encoding="utf-8"))
+    assert payload["summary"]["passed"] == 1
+
+
 @pytest.mark.parametrize(
     ("mode", "operation", "vector_file"),
     [
@@ -408,3 +462,33 @@ def test_folder_wizard_detects_cfb128_before_cfb1(tmp_path, monkeypatch, capsys)
     assert exit_code == EXIT_OK
     assert "AES-CFB128 encrypt KAT" in captured.out
     assert "AES-CFB1 encrypt KAT" not in captured.out
+
+
+def test_folder_wizard_discovers_json_files(tmp_path, monkeypatch, capsys):
+    vector_dir = tmp_path / "vectors"
+    vector_dir.mkdir()
+    shutil.copy("sample_vectors/aes/aes_cbc_128.json", vector_dir / "aes_cbc_128.json")
+
+    answers = iter(
+        [
+            "",  # algorithm: AES
+            "",  # test type: KAT
+            "",  # operation: auto-detect from file
+            "2",  # source kind: folder
+            str(vector_dir),
+            "",  # auto-detect mode
+            "",  # DUT: python
+            "2",  # report format: console
+            "",  # fail fast: no
+            "",  # run now: yes
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    exit_code = main(["--interactive"])
+
+    captured = capsys.readouterr()
+    assert exit_code == EXIT_OK
+    assert "Discovered 1 vector file(s)." in captured.out
+    assert "AES-CBC encrypt KAT" in captured.out
+    assert "AES-CBC decrypt KAT" in captured.out

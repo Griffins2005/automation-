@@ -12,6 +12,7 @@ This is a pure-Python CLI tool (no services, servers, databases, ports, or Docke
 - Tests: `python3 -m pytest` (config in `pyproject.toml`; `testpaths=tests`).
 - Run a validation (see `README.md` "Quick Start" for full examples):
   `python3 -m crypto_validation --algorithm AES --mode CBC --operation encrypt --test-type KAT --vector-file sample_vectors/aes/aes_cbc_128.rsp --dut python --report-format json --report-dir reports`
+- `.json` vector files are also supported, e.g. `sample_vectors/aes/aes_cbc_128.json`.
 - Console entry point `crypto-validate` is equivalent to `python3 -m crypto_validation`.
 
 ### Notes

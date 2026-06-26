@@ -1,0 +1,31 @@
+{
+  "algorithm": "ACVP-AES-CTR",
+  "testGroups": [
+    {
+      "tgId": 1,
+      "direction": "encrypt",
+      "tests": [
+        {
+          "tcId": 1,
+          "key": "2b7e151628aed2a6abf7158809cf4f3c",
+          "iv": "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+          "pt": "6bc1bee22e409f96e93d7e117393172a",
+          "ct": "874d6191b620e3261bef6864990db6ce"
+        }
+      ]
+    },
+    {
+      "tgId": 2,
+      "direction": "decrypt",
+      "tests": [
+        {
+          "tcId": 2,
+          "key": "2b7e151628aed2a6abf7158809cf4f3c",
+          "iv": "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+          "ct": "874d6191b620e3261bef6864990db6ce",
+          "pt": "6bc1bee22e409f96e93d7e117393172a"
+        }
+      ]
+    }
+  ]
+}

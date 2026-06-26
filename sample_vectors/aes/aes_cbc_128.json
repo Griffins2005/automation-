@@ -1,0 +1,31 @@
+{
+  "algorithm": "AES",
+  "mode": "CBC",
+  "test_type": "KAT",
+  "tests": [
+    {
+      "id": "0",
+      "operation": "encrypt",
+      "input": {
+        "key": "2b7e151628aed2a6abf7158809cf4f3c",
+        "iv": "000102030405060708090a0b0c0d0e0f",
+        "plaintext": "6bc1bee22e409f96e93d7e117393172a"
+      },
+      "expected_output": {
+        "ciphertext": "7649abac8119b246cee98e9b12e9197d"
+      }
+    },
+    {
+      "id": "1",
+      "operation": "decrypt",
+      "input": {
+        "key": "2b7e151628aed2a6abf7158809cf4f3c",
+        "iv": "000102030405060708090a0b0c0d0e0f",
+        "ciphertext": "7649abac8119b246cee98e9b12e9197d"
+      },
+      "expected_output": {
+        "plaintext": "6bc1bee22e409f96e93d7e117393172a"
+      }
+    }
+  ]
+}

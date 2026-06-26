@@ -9,6 +9,7 @@ from __future__ import annotations
 from crypto_validation.exceptions import UnsupportedTestError
 from crypto_validation.models import ValidationConfig
 from crypto_validation.parsers.base import VectorParser
+from crypto_validation.parsers.json import JsonParser
 from crypto_validation.parsers.rsp import RspParser
 
 
@@ -27,5 +28,8 @@ def build_parser(config: ValidationConfig) -> VectorParser:
 
     if config.vector_format == "rsp":
         return RspParser()
+
+    if config.vector_format == "json":
+        return JsonParser()
 
     raise UnsupportedTestError(f"Unsupported vector format: {config.vector_format}")
